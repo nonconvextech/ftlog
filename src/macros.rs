@@ -15,16 +15,14 @@
 ///
 /// # Examples
 ///
-/// ```rust
-/// use log::{log, Level};
+/// ```rust, ignore
+/// use ftlog::{log, Level};
 ///
 /// # fn main() {
 /// let data = (42, "Forty-two");
 /// let private_data = "private";
 ///
 /// log!(Level::Error, "Received errors: {}, {}", data.0, data.1);
-/// log!(target: "app_events", Level::Warn, "App warning: {}, {}, {}",
-///     data.0, data.1, private_data);
 /// # }
 /// ```
 #[macro_export(local_inner_macros)]
@@ -52,7 +50,7 @@ macro_rules! log {
 /// # Examples
 ///
 /// ```rust
-/// use log::error;
+/// use ftlog::error;
 ///
 /// # fn main() {
 /// let (err_info, port) = ("No connection", 22);
@@ -73,7 +71,7 @@ macro_rules! error {
 /// # Examples
 ///
 /// ```rust
-/// use log::warn;
+/// use ftlog::warn;
 ///
 /// # fn main() {
 /// let warn_description = "Invalid Input";
@@ -94,7 +92,7 @@ macro_rules! warn {
 /// # Examples
 ///
 /// ```rust
-/// use log::info;
+/// use ftlog::info;
 ///
 /// # fn main() {
 /// # struct Connection { port: u32, speed: f32 }
@@ -117,7 +115,7 @@ macro_rules! info {
 /// # Examples
 ///
 /// ```rust
-/// use log::debug;
+/// use ftlog::debug;
 ///
 /// # fn main() {
 /// # struct Position { x: f32, y: f32 }
@@ -139,7 +137,7 @@ macro_rules! debug {
 /// # Examples
 ///
 /// ```rust
-/// use log::trace;
+/// use ftlog::trace;
 ///
 /// # fn main() {
 /// # struct Position { x: f32, y: f32 }
@@ -167,17 +165,13 @@ macro_rules! trace {
 /// # Examples
 ///
 /// ```rust
-/// use log::Level::Debug;
-/// use log::{debug, log_enabled};
+/// use ftlog::Level::Debug;
+/// use ftlog::{debug, log_enabled};
 ///
 /// # fn foo() {
 /// if log_enabled!(Debug) {
 ///     let data = expensive_call();
 ///     debug!("expensive debug data: {} {}", data.x, data.y);
-/// }
-/// if log_enabled!(target: "Global", Debug) {
-///    let data = expensive_call();
-///    debug!(target: "Global", "expensive debug data: {} {}", data.x, data.y);
 /// }
 /// # }
 /// # struct Data { x: u32, y: u32 }

@@ -35,18 +35,18 @@
 //! 也可以直接输出到固定文件，完整的配置用法如下:
 //!
 //! ```rust
-//! use ftlog::*;
+//! use ftlog::{LogBuilder, writer::file_split::Period, LevelFilter};
 //!
 //! // 完整用法
 //! // 配置logger
 //! let logger = LogBuilder::new()
 //!     //这里可以定义自己的格式，时间格式暂时不可以自定义
-//!     .format(format)
+//!     // .format(format)
 //!     // a) 这里可以配置输出到文件
-//!     .file(PathBuf::from("./current.log"))
+//!     .file(std::path::PathBuf::from("./current.log"))
 //!     // b) 这里可以配置输出到文件，并且按指定间隔分割。这里导出的按天分割日志文件如current-20221024.log
 //!     // 配置为按分钟分割时导出的日志文件如current-20221024T1428.log
-//!     .file_split(PathBuf::from("./current.log"), Period::Day)
+//!     .file_split(std::path::PathBuf::from("./current.log"), Period::Day)
 //!     // 如果既不配置输出文件 a)， 也不配置按指定间隔分割文件 b)，则默认输出到stderr
 //!     // a) 和 b) 互斥，写在后面的生效，比如这里就是file_split生效
 //!     .max_log_level(LevelFilter::Info)
@@ -70,7 +70,7 @@
 //!
 //! ## 用法
 //!
-//! ```rust
+//! ```rust, ignore
 //! trace!("Hello world!");
 //! debug!("Hello world!");
 //! info!("Hello world!");
@@ -79,7 +79,7 @@
 //! ```
 //!
 //! 在main最后加入flush，否则在程序结束时未写入的日志会丢失：
-//! ```rust
+//! ```rust, ignore
 //! ftlog::logger().flush();
 //! ```
 //!
@@ -89,7 +89,8 @@
 //! 本库支持受限写入的功能。
 //!
 //! ```rust
-//! info!(limit: 3000, "limit running{} !", i);
+//! # use ftlog::info;
+//! info!(limit: 3000, "limit running{} !", 1);
 //! ```
 //! 上面这一行日志会有最小3000毫秒的间隔，也就是最多3000ms一条。
 //!
@@ -107,7 +108,8 @@
 //! - 年 `Period::Year`
 //!
 //! ```rust
-//! use ftlog::writer::file_split::Period;
+//! use std::path::PathBuf;
+//! use ftlog::{LogBuilder, writer::file_split::Period};
 //!
 //! let logger = LogBuilder::new()
 //!     .file_split(PathBuf::from("./current.log"), Period::Minute)
@@ -159,7 +161,7 @@
 //! ```
 //!
 //! main函数初始化加上这一行代码，即可以把官方标准log::info!的日志输出到stderr
-//! ```rust
+//! ```rust, ignore
 //! simple_logging::log_to_stderr(log::LevelFilter::Info);
 //! ```
 //!
@@ -647,7 +649,7 @@ impl Level {
     /// # Examples
     ///
     /// ```
-    /// use log::Level;
+    /// use ftlog::Level;
     ///
     /// let mut levels = Level::iter();
     ///
@@ -828,7 +830,7 @@ impl LevelFilter {
     /// # Examples
     ///
     /// ```
-    /// use log::LevelFilter;
+    /// use ftlog::LevelFilter;
     ///
     /// let mut levels = LevelFilter::iter();
     ///
@@ -877,12 +879,12 @@ impl<'a> MaybeStaticStr<'a> {
 /// ```edition2018
 /// struct SimpleLogger;
 ///
-/// impl log::Log for SimpleLogger {
-///    fn enabled(&self, metadata: &log::Metadata) -> bool {
+/// impl ftlog::Log for SimpleLogger {
+///    fn enabled(&self, metadata: &ftlog::Metadata) -> bool {
 ///        true
 ///    }
 ///
-///    fn log(&self, record: &log::Record) {
+///    fn log(&self, record: &ftlog::Record) {
 ///        if !self.enabled(record.metadata()) {
 ///            return;
 ///        }
@@ -1037,7 +1039,7 @@ impl<'a> Record<'a> {
 /// # Examples
 ///
 /// ```edition2018
-/// use log::{Level, Record};
+/// use ftlog::{Level, Record};
 ///
 /// let record = Record::builder()
 ///                 .args(format_args!("Error!"))
@@ -1052,7 +1054,7 @@ impl<'a> Record<'a> {
 /// Alternatively, use [`MetadataBuilder`](struct.MetadataBuilder.html):
 ///
 /// ```edition2018
-/// use log::{Record, Level, MetadataBuilder};
+/// use ftlog::{Record, Level, MetadataBuilder};
 ///
 /// let error_metadata = MetadataBuilder::new()
 ///                         .target("myApp")
@@ -1195,11 +1197,11 @@ impl<'a> RecordBuilder<'a> {
 /// # Examples
 ///
 /// ```edition2018
-/// use log::{Record, Level, Metadata};
+/// use ftlog::{Record, Level, Metadata};
 ///
 /// struct MyLogger;
 ///
-/// impl log::Log for MyLogger {
+/// impl ftlog::Log for MyLogger {
 ///     fn enabled(&self, metadata: &Metadata) -> bool {
 ///         metadata.level() <= Level::Info
 ///     }
@@ -1250,7 +1252,7 @@ impl<'a> Metadata<'a> {
 ///
 /// ```edition2018
 /// let target = "myApp";
-/// use log::{Level, MetadataBuilder};
+/// use ftlog::{Level, MetadataBuilder};
 /// let metadata = MetadataBuilder::new()
 ///                     .level(Level::Debug)
 ///                     .target(target)
@@ -1457,13 +1459,13 @@ pub fn set_boxed_logger(logger: Box<dyn Log>) -> Result<(), SetLoggerError> {
 /// # Examples
 ///
 /// ```edition2018
-/// use log::{error, info, warn, Record, Level, Metadata, LevelFilter};
+/// use ftlog::{error, info, warn, Record, Level, Metadata, LevelFilter};
 ///
 /// static MY_LOGGER: MyLogger = MyLogger;
 ///
 /// struct MyLogger;
 ///
-/// impl log::Log for MyLogger {
+/// impl ftlog::Log for MyLogger {
 ///     fn enabled(&self, metadata: &Metadata) -> bool {
 ///         metadata.level() <= Level::Info
 ///     }
@@ -1477,8 +1479,8 @@ pub fn set_boxed_logger(logger: Box<dyn Log>) -> Result<(), SetLoggerError> {
 /// }
 ///
 /// # fn main(){
-/// log::set_logger(&MY_LOGGER).unwrap();
-/// log::set_max_level(LevelFilter::Info);
+/// ftlog::set_logger(&MY_LOGGER).unwrap();
+/// ftlog::set_max_level(LevelFilter::Info);
 ///
 /// info!("hello log");
 /// warn!("warning");
@@ -1607,7 +1609,6 @@ pub fn logger() -> &'static dyn Log {
 
 // WARNING: this is not part of the crate's public API and is subject to change at any time
 #[doc(hidden)]
-#[cfg(not(feature = "kv_unstable"))]
 pub fn __private_api_log(
     args: fmt::Arguments,
     level: Level,
