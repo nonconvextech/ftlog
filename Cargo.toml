@@ -14,26 +14,8 @@ categories = [ "development-tools::debugging" ]
 keywords = [ "logging" ]
 exclude = [ ".standard-version", ".versionrc", ".github" ]
 
-[package.metadata.docs.rs]
-features = [ "std" ]
-
-[features]
-max_level_off = [ ]
-max_level_error = [ ]
-max_level_warn = [ ]
-max_level_info = [ ]
-max_level_debug = [ ]
-max_level_trace = [ ]
-release_max_level_off = [ ]
-release_max_level_error = [ ]
-release_max_level_warn = [ ]
-release_max_level_info = [ ]
-release_max_level_debug = [ ]
-release_max_level_trace = [ ]
-std = [ ]
-
 [dependencies]
 time = "0.1"
-cfg-if = "1.0"
 crossbeam-channel = "0.5.0"
 fxhash = "0.2.1"
+log = { version = "0.4", features=[ "std", "kv_unstable" ] }

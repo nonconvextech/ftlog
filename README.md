@@ -8,8 +8,6 @@
 普通的日志库受到磁盘io和系统pipe影响，单线程顺序写入单条速度大概要2500ns（SSD），如果碰到io抖动或者慢磁盘，日志会是低延时交易的主要瓶颈。
 本库先把日志send到channel，再启动后台单独线程recv并且磁盘写入，测试速度在300ns左右。
 
-本代码修改自`fastlog`以及官方的`log`库。
-
 CAUTION: this crate use `unchecked_math` unstable feature and `unsafe` code. Only use this crate in rust `nightly` channel.
 
 #### 日志格式
@@ -24,7 +22,8 @@ CAUTION: this crate use `unchecked_math` unstable feature and `unsafe` code. Onl
 ### 配置
 加入引用
 ```toml
-ftlog = "0.1.0"
+ftlog = "0.2.0"
+log = "0.4.17"
 ```
 
 在main开头加入配置：
@@ -62,18 +61,6 @@ let logger = LogBuilder::new()
 logger.init().expect("set logger failed");
 ```
 
-#### ftlog与log
-
-ftlog与rust的log生态不兼容，建议删除掉原来的日志库。特别是**不要让两个日志库导出到同一个地方**，否则两个日志生态会同时打印，导致日志不可读。
-
-删除原有的log库，比如：
-```toml
-# log = "*"
-# log4rs = "*"
-# simple-logging = "*"
-# env_logger = "*"
-```
-
 ### 用法
 
 ```rust, ignore
@@ -95,7 +82,7 @@ ftlog::logger().flush();
 本库支持受限写入的功能。
 
 ```rust
-info!(limit: 3000, "limit running{} !", 1);
+info!(limit=3000; "limit running{} !", 1);
 ```
 上面这一行日志会有最小3000毫秒的间隔，也就是最多3000ms一条。
 
@@ -151,25 +138,5 @@ log-20221026T1351
 log-20221026T1352
 log-20221026T1353
 ```
-
-
-### 其他库日志不输出的问题
-ftlog为了防止日志输出太多卡住服务器，特意开发了limit: 3000的功能，
-这个功能要改一个结构体导致跟官方的log库不兼容。
-
-为了让用了官方`log::info!`的代码也可以输出日志（通常是引用的其他库的代码日志），需要在项目中配置logging，比如使用`simple-logging`, `env-logger`, `log4rs`等。
-
-这里以`simple-logging`为例, `Cargo.toml` 加上
-```toml
-log = "*"
-simple-logging = "*"
-```
-
-main函数初始化加上这一行代码，即可以把官方标准log::info!的日志输出到stderr
-```rust, ignore
-simple_logging::log_to_stderr(log::LevelFilter::Info);
-```rust
-
-建议指定crate的版本，并配置ftlog和rust标准log库输出到不同地方（如打印到两个不同文件），否则两个库可能同时写入导致日志错乱。
 
 License: MIT OR Apache-2.0
