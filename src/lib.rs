@@ -1581,7 +1581,7 @@ impl fmt::Display for SetLoggerError {
 
 // The Error trait is not available in libcore
 #[cfg(feature = "std")]
-impl error::Error for SetLoggerError {}
+impl std::error::Error for SetLoggerError {}
 
 /// The type returned by [`from_str`] when the string doesn't match any of the log levels.
 ///
