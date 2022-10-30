@@ -1,5 +1,10 @@
 # ftlog
 
+[![Build Status](https://github.com/nonconvextech/ftlog/workflows/CI%20%28Linux%29/badge.svg?branch=main)](https://github.com/nonconvextech/ftlog/actions)
+![License](https://img.shields.io/crates/l/ftlog.svg)
+[![Latest Version](https://img.shields.io/crates/v/ftlog.svg)](https://crates.io/crates/ftlog)
+[![ftlog](https://docs.rs/ftlog/badge.svg)](https://docs.rs/ftlog)
+
 普通的日志库受到磁盘io和系统pipe影响，单线程顺序写入单条速度大概要2500ns（SSD），如果碰到io抖动或者慢磁盘，日志会是低延时交易的主要瓶颈。
 本库先把日志send到channel，再启动后台单独线程recv并且磁盘写入，测试速度在300ns左右。
 
@@ -36,18 +41,18 @@ LogBuilder::new().build().unwrap().init().unwrap();
 也可以直接输出到固定文件，完整的配置用法如下:
 
 ```rust
-use ftlog::*;
+use ftlog::{LogBuilder, writer::file_split::Period, LevelFilter};
 
 // 完整用法
 // 配置logger
 let logger = LogBuilder::new()
     //这里可以定义自己的格式，时间格式暂时不可以自定义
-    .format(format)
+    // .format(format)
     // a) 这里可以配置输出到文件
-    .file(PathBuf::from("./current.log"))
+    .file(std::path::PathBuf::from("./current.log"))
     // b) 这里可以配置输出到文件，并且按指定间隔分割。这里导出的按天分割日志文件如current-20221024.log
     // 配置为按分钟分割时导出的日志文件如current-20221024T1428.log
-    .file_split(PathBuf::from("./current.log"), Period::Day)
+    .file_split(std::path::PathBuf::from("./current.log"), Period::Day)
     // 如果既不配置输出文件 a)， 也不配置按指定间隔分割文件 b)，则默认输出到stderr
     // a) 和 b) 互斥，写在后面的生效，比如这里就是file_split生效
     .max_log_level(LevelFilter::Info)
@@ -71,16 +76,16 @@ ftlog与rust的log生态不兼容，建议删除掉原来的日志库。特别�
 
 ### 用法
 
-```rust
+```rust, ignore
 trace!("Hello world!");
 debug!("Hello world!");
 info!("Hello world!");
 warn!("Hello world!");
 error!("Hello world!");
-```
+```rust
 
 在main最后加入flush，否则在程序结束时未写入的日志会丢失：
-```rust
+```rust, ignore
 ftlog::logger().flush();
 ```
 
@@ -90,7 +95,7 @@ ftlog::logger().flush();
 本库支持受限写入的功能。
 
 ```rust
-info!(limit: 3000, "limit running{} !", i);
+info!(limit: 3000, "limit running{} !", 1);
 ```
 上面这一行日志会有最小3000毫秒的间隔，也就是最多3000ms一条。
 
@@ -108,7 +113,8 @@ info!(limit: 3000, "limit running{} !", i);
 - 年 `Period::Year`
 
 ```rust
-use ftlog::writer::file_split::Period;
+use std::path::PathBuf;
+use ftlog::{LogBuilder, writer::file_split::Period};
 
 let logger = LogBuilder::new()
     .file_split(PathBuf::from("./current.log"), Period::Minute)
@@ -160,8 +166,10 @@ simple-logging = "*"
 ```
 
 main函数初始化加上这一行代码，即可以把官方标准log::info!的日志输出到stderr
-```rust
+```rust, ignore
 simple_logging::log_to_stderr(log::LevelFilter::Info);
-```
+```rust
 
 建议指定crate的版本，并配置ftlog和rust标准log库输出到不同地方（如打印到两个不同文件），否则两个库可能同时写入导致日志错乱。
+
+License: MIT OR Apache-2.0

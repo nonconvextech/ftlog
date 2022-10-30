@@ -1,4 +1,9 @@
 #![feature(unchecked_math)]
+//! [![Build Status](https://github.com/nonconvextech/ftlog/workflows/CI%20%28Linux%29/badge.svg?branch=main)](https://github.com/nonconvextech/ftlog/actions)
+//! ![License](https://img.shields.io/crates/l/ftlog.svg)
+//! [![Latest Version](https://img.shields.io/crates/v/ftlog.svg)](https://crates.io/crates/ftlog)
+//! [![ftlog](https://docs.rs/ftlog/badge.svg)](https://docs.rs/ftlog)
+//!
 //! 普通的日志库受到磁盘io和系统pipe影响，单线程顺序写入单条速度大概要2500ns（SSD），如果碰到io抖动或者慢磁盘，日志会是低延时交易的主要瓶颈。
 //! 本库先把日志send到channel，再启动后台单独线程recv并且磁盘写入，测试速度在300ns左右。
 //!
