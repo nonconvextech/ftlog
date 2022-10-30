@@ -13,12 +13,14 @@ jobs:
       - name: rustfmt
         uses: actions-rs/cargo@v1
         with:
+          toolchain: nightly
           command: fmt
           args: --all -- --check
 
       - name: check build
         uses: actions-rs/cargo@v1
         with:
+          toolchain: nightly
           command: check
           args: --all --bins --examples --tests
 
@@ -26,6 +28,7 @@ jobs:
         uses: actions-rs/cargo@v1
         timeout-minutes: 40
         with:
+          toolchain: nightly
           command: test
           args: --all --no-fail-fast -- --nocapture
 
@@ -39,6 +42,7 @@ jobs:
         env:
           RUSTDOCFLAGS: -Dwarnings
         with:
+          toolchain: nightly
           command: doc
           args: --all --no-deps
 
@@ -59,4 +63,5 @@ jobs:
       - name: publish
         uses: actions-rs/cargo@v1
         with:
+          toolchain: nightly
           command: publish

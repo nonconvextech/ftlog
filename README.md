@@ -1,11 +1,11 @@
 # ftlog
 
-## ftlog
-
 普通的日志库受到磁盘io和系统pipe影响，单线程顺序写入单条速度大概要2500ns（SSD），如果碰到io抖动或者慢磁盘，日志会是低延时交易的主要瓶颈。
 本库先把日志send到channel，再启动后台单独线程recv并且磁盘写入，测试速度在300ns左右。
 
 本代码修改自`fastlog`以及官方的`log`库。
+
+CAUTION: this crate use `unchecked_math` unstable feature and `unsafe` code. Only use this crate in rust `nightly` channel.
 
 #### 日志格式
 ```plain
