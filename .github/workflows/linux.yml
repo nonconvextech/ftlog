@@ -10,6 +10,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            override: true
+            components: rustfmt
+
       - name: rustfmt
         uses: actions-rs/cargo@v1
         with:
@@ -37,6 +44,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            override: true
+            components: rustfmt
+
       - name: doc
         uses: actions-rs/cargo@v1
         env:
@@ -53,6 +67,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            override: true
+            components: rustfmt
 
       - name: login
         env:
