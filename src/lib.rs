@@ -139,7 +139,7 @@
 //! log-20221026T1353
 //! ```
 
-pub use log::{debug, error, info, log, log_enabled, trace, warn};
+pub use log::{debug, error, info, log, log_enabled, trace, warn, LevelFilter, Record};
 
 use std::fs::OpenOptions;
 use std::io::{stderr, Error as IoError, Write};
@@ -147,7 +147,7 @@ use std::path::PathBuf;
 
 use fxhash::FxHashMap;
 use log::kv::Key;
-use log::{set_boxed_logger, set_max_level, LevelFilter, Log, Metadata, Record, SetLoggerError};
+use log::{set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
 use time::{get_time, Timespec};
 
 use self::writer::file_split::{FileSplit, Period};
