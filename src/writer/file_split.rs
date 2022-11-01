@@ -38,20 +38,20 @@ impl FileSplit {
             Period::Month => {
                 let year = tm.tm_year + 1900;
                 let month = tm.tm_mon + 1;
-                format!("{}{}", year, month)
+                format!("{}{:02}", year, month)
             }
             Period::Day => {
                 let year = tm.tm_year + 1900;
                 let month = tm.tm_mon + 1;
                 let day = tm.tm_mday;
-                format!("{}{}{}", year, month, day)
+                format!("{}{:02}{:02}", year, month, day)
             }
             Period::Hour => {
                 let year = tm.tm_year + 1900;
                 let month = tm.tm_mon + 1;
                 let day = tm.tm_mday;
                 let hour = tm.tm_hour;
-                format!("{}{}{}T{}", year, month, day, hour)
+                format!("{}{:02}{:02}T{:02}", year, month, day, hour)
             }
             Period::Minute => {
                 let year = tm.tm_year + 1900;
@@ -59,7 +59,7 @@ impl FileSplit {
                 let day = tm.tm_mday;
                 let hour = tm.tm_hour;
                 let minute = tm.tm_min;
-                format!("{}{}{}T{}{}", year, month, day, hour, minute)
+                format!("{}{:02}{:02}T{:02}{:02}", year, month, day, hour, minute)
             }
         };
 
