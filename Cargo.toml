@@ -1,8 +1,8 @@
 [package]
 name = "ftlog"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-authors = ["Non-convex Tech"]
+authors = [ "Non-convex Tech" ]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/nonconvextech/ftlog"
@@ -10,9 +10,9 @@ documentation = "https://docs.rs/ftlog"
 description = """
 An asynchronous logging library for high performance
 """
-categories = ["development-tools::debugging"]
-keywords = ["logging"]
-exclude = [".standard-version", ".versionrc", ".github"]
+categories = [ "development-tools::debugging" ]
+keywords = [ "logging" ]
+exclude = [ ".standard-version", ".versionrc", ".github" ]
 
 [package.metadata.docs.rs]
 features = [ "std" ]

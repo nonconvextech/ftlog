@@ -1598,7 +1598,7 @@ impl fmt::Display for ParseLevelError {
 
 // The Error trait is not available in libcore
 #[cfg(feature = "std")]
-impl error::Error for ParseLevelError {}
+impl std::error::Error for ParseLevelError {}
 
 /// Returns a reference to the logger.
 ///
