@@ -198,7 +198,6 @@ impl FileAppender {
 
 impl Write for FileAppender {
     fn write(&mut self, record: &[u8]) -> std::io::Result<usize> {
-        let mut deleted = None;
         if let Some(Rotate {
             start,
             wait,
@@ -242,14 +241,15 @@ impl Write for FileAppender {
                             })
                             .unwrap_or(false)
                     });
+
                 let del_msg = to_remove
                     .filter(|f| std::fs::remove_file(f.path()).is_ok())
                     .map(|x| x.file_name().to_string_lossy().to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                deleted = Some(del_msg)
-                    .filter(|d| !d.is_empty())
-                    .map(|x| format!("Log file deleted: {}\n", x));
+                if !del_msg.is_empty() {
+                    crate::info!("Log file deleted: {}", del_msg)
+                }
             };
             if start.to(PreciseTime::now()) > *wait {
                 // close current file and create new file
@@ -263,9 +263,6 @@ impl Write for FileAppender {
                 (*start, *wait) = Self::until(*period);
             }
         };
-        if let Some(d) = deleted {
-            let _ = self.file.write_all(d.as_bytes());
-        }
         self.file.write_all(record).map(|_| record.len())
     }
 
