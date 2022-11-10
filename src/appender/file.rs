@@ -15,17 +15,33 @@ pub enum Period {
     Month,
     Year,
 }
-
-pub struct FileSplit {
-    file: File,
-    path: PathBuf,
-
+struct Rotate {
     start: PreciseTime,
     wait: Duration,
-
     period: Period,
+    keep: Option<std::time::Duration>,
 }
-impl FileSplit {
+
+pub struct FileAppender {
+    file: File,
+    path: PathBuf,
+    rotate: Option<Rotate>,
+}
+impl FileAppender {
+    /// Create a file appender that write log to file
+    pub fn new<T: AsRef<Path>>(path: T) -> Self {
+        let p = path.as_ref();
+        Self {
+            file: OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(p)
+                .unwrap(),
+            path: p.to_path_buf(),
+            rotate: None,
+        }
+    }
+
     // TODO custom format
     fn file<T: AsRef<Path>>(path: T, period: Period) -> PathBuf {
         let p = path.as_ref();
@@ -79,7 +95,9 @@ impl FileSplit {
             ))
         }
     }
-    pub fn new<T: AsRef<Path>>(path: T, period: Period) -> Self {
+
+    /// Create a file appender that rotate a new file every given period
+    pub fn rotate<T: AsRef<Path>>(path: T, period: Period) -> Self {
         let p = path.as_ref();
         let (start, wait) = Self::until(period);
         let path = Self::file(&p, period);
@@ -91,9 +109,34 @@ impl FileSplit {
         Self {
             file,
             path: p.to_path_buf(),
-            start,
-            wait,
-            period,
+            rotate: Some(Rotate {
+                start,
+                wait,
+                period,
+                keep: None,
+            }),
+        }
+    }
+
+    /// Create a file appender with rotate, auto delete logs that last modified before given expire duration
+    pub fn rotate_with_expire<T: AsRef<Path>>(path: T, period: Period, keep: Duration) -> Self {
+        let p = path.as_ref();
+        let (start, wait) = Self::until(period);
+        let path = Self::file(&p, period);
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        Self {
+            file,
+            path: p.to_path_buf(),
+            rotate: Some(Rotate {
+                start,
+                wait,
+                period,
+                keep: Some(keep.to_std().unwrap()),
+            }),
         }
     }
 
@@ -153,18 +196,75 @@ impl FileSplit {
     }
 }
 
-impl Write for FileSplit {
+impl Write for FileAppender {
     fn write(&mut self, record: &[u8]) -> std::io::Result<usize> {
-        if self.start.to(PreciseTime::now()) > self.wait {
-            // close current file and create new file
-            self.file.flush()?;
-            let path = Self::file(&self.path, self.period);
-            self.file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .unwrap();
-            (self.start, self.wait) = Self::until(self.period);
+        let mut deleted = None;
+        if let Some(Rotate {
+            start,
+            wait,
+            period,
+            keep,
+        }) = &mut self.rotate
+        {
+            if let Some(keep_duration) = keep {
+                let to_remove = std::fs::read_dir(self.path.parent().unwrap())
+                    .unwrap()
+                    .filter_map(|f| f.ok())
+                    .filter(|x| x.file_type().map(|x| x.is_file()).unwrap_or(false))
+                    .filter(|x| {
+                        let p = x.path();
+                        let name = p.file_stem().unwrap().to_string_lossy();
+                        if let Some((_, time)) = name.rsplit_once("-") {
+                            let check = |(ix, x): (usize, char)| match ix {
+                                8 => x == 'T',
+                                _ => x.is_digit(10),
+                            };
+                            let len = match period {
+                                Period::Minute => time.len() == 13,
+                                Period::Hour => time.len() == 11,
+                                Period::Day => time.len() == 8,
+                                Period::Month => time.len() == 6,
+                                Period::Year => time.len() == 4,
+                            };
+                            len && time.chars().enumerate().all(check)
+                        } else {
+                            false
+                        }
+                    })
+                    .filter(|x| {
+                        x.metadata()
+                            .ok()
+                            .and_then(|x| x.modified().ok())
+                            .map(|time| {
+                                time.elapsed()
+                                    .map(|elapsed| elapsed > *keep_duration)
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(false)
+                    });
+                let del_msg = to_remove
+                    .filter(|f| std::fs::remove_file(f.path()).is_ok())
+                    .map(|x| x.file_name().to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                deleted = Some(del_msg)
+                    .filter(|d| !d.is_empty())
+                    .map(|x| format!("Log file deleted: {}\n", x));
+            };
+            if start.to(PreciseTime::now()) > *wait {
+                // close current file and create new file
+                self.file.flush()?;
+                let path = Self::file(&self.path, *period);
+                self.file = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                    .unwrap();
+                (*start, *wait) = Self::until(*period);
+            }
+        };
+        if let Some(d) = deleted {
+            let _ = self.file.write_all(d.as_bytes());
         }
         self.file.write_all(record).map(|_| record.len())
     }
@@ -184,23 +284,23 @@ mod test {
         // Mon Oct 24 2022 16:00:00 GMT+0000
         let now = time::at(Timespec::new(1666627200, 0)).to_utc();
 
-        let tm_next = FileSplit::next(&now, Period::Year);
+        let tm_next = FileAppender::next(&now, Period::Year);
         let tm = time::at(Timespec::new(1672531200, 0));
         assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
 
-        let tm_next = FileSplit::next(&now, Period::Month);
+        let tm_next = FileAppender::next(&now, Period::Month);
         let tm = time::at(Timespec::new(1667260800, 0));
         assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
 
-        let tm_next = FileSplit::next(&now, Period::Day);
+        let tm_next = FileAppender::next(&now, Period::Day);
         let tm = time::at(Timespec::new(1666656000, 0));
         assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
 
-        let tm_next = FileSplit::next(&now, Period::Hour);
+        let tm_next = FileAppender::next(&now, Period::Hour);
         let tm = time::at(Timespec::new(1666630800, 0));
         assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
 
-        let tm_next = FileSplit::next(&now, Period::Minute);
+        let tm_next = FileAppender::next(&now, Period::Minute);
         let tm = time::at(Timespec::new(1666627260, 0));
         println!("{}", tm_next.to_timespec().sec);
         assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());

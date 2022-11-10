@@ -1,7 +1,9 @@
-use std::path::PathBuf;
-
-use ftlog::{info, writer::file_split::Period, LogBuilder};
+use ftlog::{
+    appender::{file::Period, FileAppender},
+    info, LogBuilder,
+};
 use log::{LevelFilter, Record};
+use time::Duration;
 fn init() {
     // we can modify log style. Datetime format is fiex for performance
     let format = |record: &Record| {
@@ -17,12 +19,13 @@ fn init() {
     };
     let logger = LogBuilder::new()
         .format(format) // define our own format
-        // a) output to file in append mode
-        // .file(PathBuf::from("./current.log"))
-        // b) output to file, and split with given period. Output file ex. `current-20221024T1420.log`
-        // When neither a) output to file nor b) output to file with auto split, log output is directed to stderr.
-        .file_split(PathBuf::from("./current.log"), Period::Minute)
         .max_log_level(LevelFilter::Info)
+        // define root appender, pass None would write to stderr
+        .root(FileAppender::rotate_with_expire(
+            "./current.log",
+            Period::Minute,
+            Duration::seconds(30),
+        ))
         .build()
         .expect("logger build failed");
     logger.init().expect("set logger failed");
@@ -66,3 +69,11 @@ Default style example:
 2022-04-11 15:08:23.862+08 0ms INFO main/src/main.rs:28 running 4!
 2022-04-11 15:08:24.864+08 0ms INFO main/src/main.rs:28 running 5!
  */
+
+// fn test {
+
+//     ftlog::Logger::builder()
+//     .root()
+//     .build();
+
+//  }

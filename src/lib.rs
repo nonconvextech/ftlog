@@ -141,22 +141,28 @@
 
 pub use log::{debug, error, info, log, log_enabled, trace, warn, LevelFilter, Record};
 
-use std::fs::OpenOptions;
+use std::collections::HashMap;
 use std::io::{stderr, Error as IoError, Write};
-use std::path::PathBuf;
 
 use fxhash::FxHashMap;
 use log::kv::Key;
 use log::{set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
 use time::{get_time, Timespec};
 
-use self::writer::file_split::{FileSplit, Period};
+pub mod appender;
 
-pub mod writer;
+#[derive(Clone, Debug)]
+struct LogMsg {
+    tm: Timespec,
+    msg: String,
+    target: String,
+    limit: u32,
+    limit_key: u64,
+}
 
 #[derive(Clone, Debug)]
 enum LoggerInput {
-    LogMsg((Timespec, String, u32, u64)),
+    LogMsg(LogMsg),
     Flush,
     Quit,
 }
@@ -173,9 +179,6 @@ pub struct Logger {
     notification: crossbeam_channel::Receiver<LoggerOutput>,
     worker_thread: Option<std::thread::JoinHandle<()>>,
 }
-
-unsafe impl Send for Logger {}
-unsafe impl Sync for Logger {}
 
 impl Logger {
     pub fn init(self) -> Result<(), SetLoggerError> {
@@ -215,7 +218,13 @@ impl Log for Logger {
             hash_id
         };
         self.queue
-            .send(LoggerInput::LogMsg((get_time(), log_msg, limit, limit_key)))
+            .send(LoggerInput::LogMsg(LogMsg {
+                tm: get_time(),
+                msg: log_msg,
+                target: record.target().to_owned(),
+                limit,
+                limit_key,
+            }))
             .expect("logger queue closed when logging, this is a bug")
     }
 
@@ -247,7 +256,15 @@ impl Drop for Logger {
 pub struct LogBuilder {
     format: Box<dyn Fn(&Record) -> String + Sync + Send>,
     level: LevelFilter,
-    writer: Option<Box<dyn Write + Send>>,
+    root: Option<Box<dyn Write + Send>>,
+    appenders: HashMap<&'static str, Box<dyn Write + Send>>,
+    filters: Vec<Directive>,
+}
+
+struct Directive {
+    name: &'static str,
+    level: Option<LevelFilter>,
+    appender: Option<&'static str>,
 }
 
 impl LogBuilder {
@@ -265,7 +282,9 @@ impl LogBuilder {
                 )
             }),
             level: LevelFilter::Info,
-            writer: None,
+            root: None,
+            appenders: HashMap::new(),
+            filters: Vec::new(),
         }
     }
 
@@ -279,18 +298,37 @@ impl LogBuilder {
     }
 
     #[inline]
-    pub fn file<T: Into<PathBuf>>(mut self, path: T) -> LogBuilder {
-        let f = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path.into());
-        self.writer = Some(Box::new(f.unwrap()));
+    pub fn appender(
+        mut self,
+        name: &'static str,
+        appender: impl Write + Send + 'static,
+    ) -> LogBuilder {
+        self.appenders.insert(name, Box::new(appender));
         self
     }
 
     #[inline]
-    pub fn file_split<T: Into<PathBuf>>(mut self, path: T, period: Period) -> LogBuilder {
-        self.writer = Some(Box::new(FileSplit::new(path.into(), period)));
+    pub fn filter<A: Into<Option<&'static str>>, L: Into<Option<LevelFilter>>>(
+        mut self,
+        target: &'static str,
+        appender: A,
+        level: L,
+    ) -> LogBuilder {
+        let appender = appender.into();
+        let level = level.into();
+        if appender.is_some() || level.is_some() {
+            self.filters.push(Directive {
+                name: target,
+                appender: appender,
+                level: level,
+            });
+        }
+        self
+    }
+
+    #[inline]
+    pub fn root(mut self, writer: impl Write + Send + 'static) -> LogBuilder {
+        self.root = Some(Box::new(writer));
         self
     }
 
@@ -306,7 +344,8 @@ impl LogBuilder {
         let worker_thread = std::thread::Builder::new()
             .name("logger".to_string())
             .spawn(move || {
-                let mut writer: Box<dyn Write> = match self.writer {
+                let _appenders = self.appenders;
+                let mut writer: Box<dyn Write> = match self.root {
                     Some(w) => w,
                     _ => Box::new(stderr()) as Box<dyn Write>,
                 };
@@ -314,7 +353,7 @@ impl LogBuilder {
                 let mut missed_log = FxHashMap::default();
                 loop {
                     match receiver.recv() {
-                        Ok(LoggerInput::LogMsg((tm, msg, limit, limit_key))) => {
+                        Ok(LoggerInput::LogMsg(LogMsg{tm, msg, limit, limit_key, target:_})) => {
                             let now = get_time();
                             let now_nanos = now.sec * 1000_000_000 + now.nsec as i64;
                             if limit > 0 {
