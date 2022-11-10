@@ -195,37 +195,39 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record) {
-        let limit = record
-            .key_values()
-            .get(Key::from_str("limit"))
-            .map(|x| x.to_u64())
-            .flatten()
-            .unwrap_or(0) as u32;
-        let log_msg = (self.format)(record);
-        let limit_key = if limit == 0 {
-            0
-        } else {
-            let mut hash_id = 2166136261_u64;
-            unsafe {
-                for c in record.module_path().unwrap_or("").as_bytes() {
-                    hash_id = hash_id.unchecked_mul(16777619) ^ (*c as u64);
+        if self.enabled(record.metadata()) {
+            let limit = record
+                .key_values()
+                .get(Key::from_str("limit"))
+                .map(|x| x.to_u64())
+                .flatten()
+                .unwrap_or(0) as u32;
+            let log_msg = (self.format)(record);
+            let limit_key = if limit == 0 {
+                0
+            } else {
+                let mut hash_id = 2166136261_u64;
+                unsafe {
+                    for c in record.module_path().unwrap_or("").as_bytes() {
+                        hash_id = hash_id.unchecked_mul(16777619) ^ (*c as u64);
+                    }
+                    for c in record.file().unwrap_or("").as_bytes() {
+                        hash_id = hash_id.unchecked_mul(16777619) ^ (*c as u64);
+                    }
+                    hash_id = hash_id.unchecked_mul(16777619) ^ (record.line().unwrap_or(0) as u64);
                 }
-                for c in record.file().unwrap_or("").as_bytes() {
-                    hash_id = hash_id.unchecked_mul(16777619) ^ (*c as u64);
-                }
-                hash_id = hash_id.unchecked_mul(16777619) ^ (record.line().unwrap_or(0) as u64);
-            }
-            hash_id
-        };
-        self.queue
-            .send(LoggerInput::LogMsg(LogMsg {
-                tm: get_time(),
-                msg: log_msg,
-                target: record.target().to_owned(),
-                limit,
-                limit_key,
-            }))
-            .expect("logger queue closed when logging, this is a bug")
+                hash_id
+            };
+            self.queue
+                .send(LoggerInput::LogMsg(LogMsg {
+                    tm: get_time(),
+                    msg: log_msg,
+                    target: record.target().to_owned(),
+                    limit,
+                    limit_key,
+                }))
+                .expect("logger queue closed when logging, this is a bug")
+        }
     }
 
     fn flush(&self) {
