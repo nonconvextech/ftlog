@@ -1,24 +1,53 @@
+use std::fmt::Display;
+
 use ftlog::{
     appender::{file::Period, FileAppender},
-    info, LogBuilder,
+    info, FtLogFormat, LogBuilder,
 };
-use log::{LevelFilter, Record};
+use log::{Level, LevelFilter, Record};
 use time::Duration;
 fn init() {
     // we can modify log style. Datetime format is fiex for performance
-    let format = |record: &Record| {
-        format!(
-            "{}{}/{}:{}[{}] {}",
-            std::thread::current().name().unwrap_or_default(),
-            record.module_path().unwrap_or(""),
-            record.file().unwrap_or(""),
-            record.line().unwrap_or(0),
-            record.level(),
-            record.args()
-        )
-    };
+    struct MyFormatter;
+    impl FtLogFormat for MyFormatter {
+        fn msg(&self, record: &Record) -> Box<dyn Send + Sync + std::fmt::Display> {
+            Box::new(Msg {
+                level: record.level(),
+                thread: std::thread::current().name().map(|n| n.to_string()),
+                file: record.file_static(),
+                line: record.line(),
+                args: format!("{}", record.args()),
+                module_path: record.module_path_static(),
+            })
+        }
+    }
+
+    struct Msg {
+        level: Level,
+        thread: Option<String>,
+        file: Option<&'static str>,
+        line: Option<u32>,
+        args: String,
+        module_path: Option<&'static str>,
+    }
+
+    impl Display for Msg {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(&format!(
+                "{}@{}||{}:{}[{}] {}",
+                self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
+                self.module_path.unwrap_or(""),
+                self.file.unwrap_or(""),
+                self.line.unwrap_or(0),
+                self.level,
+                self.args
+            ))
+        }
+    }
+
     let logger = LogBuilder::new()
-        .format(format) // define our own format
+        // use our own format
+        .format(MyFormatter)
         .max_log_level(LevelFilter::Info)
         // define root appender, pass None would write to stderr
         .root(FileAppender::rotate_with_expire(

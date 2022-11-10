@@ -40,13 +40,32 @@ LogBuilder::new().build().unwrap().init().unwrap();
 也可以直接输出到固定文件，完整的配置用法如下:
 
 ```rust
-use ftlog::{LogBuilder, appender::{Period, FileAppender}, LevelFilter};
+use ftlog::{LogBuilder, appender::{Period, FileAppender}, LevelFilter, Record, FtLogFormat};
 
 // 完整用法
+
+// Custom format
+
+// Here is the dumbest implementation that format to String in worker thread
+// A better way is to store required field and send to log thread to format into string
+struct StringFormatter;
+impl FtLogFormat for StringFormatter {
+    fn msg(&self, record: &Record) -> Box<dyn Send + Sync + std::fmt::Display> {
+        Box::new(format!(
+            "{} {}/{}:{} {}",
+            record.level(),
+            std::thread::current().name().unwrap_or_default(),
+            record.file().unwrap_or(""),
+            record.line().unwrap_or(0),
+            record.args()
+        ))
+    }
+}
+
 // 配置logger
 let logger = LogBuilder::new()
     //这里可以定义自己的格式，时间格式暂时不可以自定义
-    // .format(format)
+    .format(StringFormatter)
     .root(FileAppender::rotate("./current.log", Period::Day))
     .max_log_level(LevelFilter::Info)
     .build()

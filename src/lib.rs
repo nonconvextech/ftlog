@@ -39,13 +39,32 @@
 //! 也可以直接输出到固定文件，完整的配置用法如下:
 //!
 //! ```rust
-//! use ftlog::{LogBuilder, appender::{Period, FileAppender}, LevelFilter};
+//! use ftlog::{LogBuilder, appender::{Period, FileAppender}, LevelFilter, Record, FtLogFormat};
 //!
 //! // 完整用法
+//!
+//! // Custom format
+//! 
+//! // Here is the dumbest implementation that format to String in worker thread
+//! // A better way is to store required field and send to log thread to format into string
+//! struct StringFormatter;
+//! impl FtLogFormat for StringFormatter {
+//!     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + std::fmt::Display> {
+//!         Box::new(format!(
+//!             "{} {}/{}:{} {}",
+//!             record.level(),
+//!             std::thread::current().name().unwrap_or_default(),
+//!             record.file().unwrap_or(""),
+//!             record.line().unwrap_or(0),
+//!             record.args()
+//!         ))
+//!     }
+//! }
+//!
 //! // 配置logger
 //! let logger = LogBuilder::new()
 //!     //这里可以定义自己的格式，时间格式暂时不可以自定义
-//!     // .format(format)
+//!     .format(StringFormatter)
 //!     .root(FileAppender::rotate("./current.log", Period::Day))
 //!     .max_log_level(LevelFilter::Info)
 //!     .build()
@@ -132,9 +151,10 @@
 //! log-20221026T1353
 //! ```
 
-pub use log::{debug, error, info, log, log_enabled, trace, warn, LevelFilter, Record};
+pub use log::{debug, error, info, log, log_enabled, trace, warn, Level, LevelFilter, Record};
 
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::io::{stderr, Error as IoError, Write};
 
 use fxhash::FxHashMap;
@@ -144,16 +164,14 @@ use time::{get_time, Timespec};
 
 pub mod appender;
 
-#[derive(Clone, Debug)]
 struct LogMsg {
     tm: Timespec,
-    msg: String,
+    msg: Box<dyn Sync + Send + Display>,
     target: String,
     limit: u32,
     limit_key: u64,
 }
 
-#[derive(Clone, Debug)]
 enum LoggerInput {
     LogMsg(LogMsg),
     Flush,
@@ -165,8 +183,45 @@ enum LoggerOutput {
     Flushed,
 }
 
+pub trait FtLogFormat: Send + Sync {
+    fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display>;
+}
+pub struct FtLogFormatter;
+impl FtLogFormat for FtLogFormatter {
+    fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display> {
+        Box::new(Message {
+            level: record.level(),
+            thread: std::thread::current().name().map(|n| n.to_string()),
+            file: record.file_static(),
+            line: record.line(),
+            args: format!("{}", record.args()),
+        })
+    }
+}
+
+struct Message {
+    level: Level,
+    thread: Option<String>,
+    file: Option<&'static str>,
+    line: Option<u32>,
+    args: String,
+}
+
+impl Display for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!(
+            "{} {}/{}:{} {}",
+            self.level,
+            self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
+            self.file.unwrap_or(""),
+            self.line.unwrap_or(0),
+            self.args
+        ))
+    }
+}
+
 pub struct Logger {
-    format: Box<dyn Fn(&Record) -> String + Sync + Send>,
+    format: Box<dyn FtLogFormat>,
     level: LevelFilter,
     queue: crossbeam_channel::Sender<LoggerInput>,
     notification: crossbeam_channel::Receiver<LoggerOutput>,
@@ -195,7 +250,7 @@ impl Log for Logger {
                 .map(|x| x.to_u64())
                 .flatten()
                 .unwrap_or(0) as u32;
-            let log_msg = (self.format)(record);
+            let msg = self.format.msg(record);
             let limit_key = if limit == 0 {
                 0
             } else {
@@ -214,7 +269,7 @@ impl Log for Logger {
             self.queue
                 .send(LoggerInput::LogMsg(LogMsg {
                     tm: get_time(),
-                    msg: log_msg,
+                    msg: msg,
                     target: record.target().to_owned(),
                     limit,
                     limit_key,
@@ -249,7 +304,7 @@ impl Drop for Logger {
 }
 
 pub struct LogBuilder {
-    format: Box<dyn Fn(&Record) -> String + Sync + Send>,
+    format: Box<dyn FtLogFormat>,
     level: LevelFilter,
     root: Option<Box<dyn Write + Send>>,
     appenders: HashMap<&'static str, Box<dyn Write + Send>>,
@@ -266,16 +321,7 @@ impl LogBuilder {
     #[inline]
     pub fn new() -> LogBuilder {
         LogBuilder {
-            format: Box::new(|record: &Record| {
-                format!(
-                    "{} {}/{}:{} {}",
-                    record.level(),
-                    std::thread::current().name().unwrap_or_default(),
-                    record.file().unwrap_or(""),
-                    record.line().unwrap_or(0),
-                    record.args()
-                )
-            }),
+            format: Box::new(FtLogFormatter),
             level: LevelFilter::Info,
             root: None,
             appenders: HashMap::new(),
@@ -284,10 +330,7 @@ impl LogBuilder {
     }
 
     #[inline]
-    pub fn format<F: 'static>(mut self, format: F) -> LogBuilder
-    where
-        F: Fn(&Record) -> String + Sync + Send,
-    {
+    pub fn format<F: FtLogFormat + 'static>(mut self, format: F) -> LogBuilder {
         self.format = Box::new(format);
         self
     }
