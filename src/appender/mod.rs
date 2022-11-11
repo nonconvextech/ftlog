@@ -1,3 +1,4 @@
+//! Useful appenders
 pub mod file;
 
 pub use file::{FileAppender, Period};

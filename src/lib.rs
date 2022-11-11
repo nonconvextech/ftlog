@@ -201,14 +201,16 @@ enum LoggerInput {
     Quit,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 enum LoggerOutput {
     Flushed,
+    FlushError(std::io::Error),
 }
 
 pub trait FtLogFormat: Send + Sync {
     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display>;
 }
+/// Default ftlog formatter
 pub struct FtLogFormatter;
 impl FtLogFormat for FtLogFormatter {
     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display> {
@@ -509,9 +511,19 @@ impl Builder {
                             }
                         }
                         Ok(LoggerInput::Flush) => {
-                            notification_sender
-                                .send(LoggerOutput::Flushed)
-                                .expect("logger notification failed");
+                            let flush_result = appenders
+                                .values_mut()
+                                .chain([&mut root])
+                                .find_map(|w| w.flush().err());
+                            if let Some(error) = flush_result {
+                                notification_sender
+                                    .send(LoggerOutput::FlushError(error))
+                                    .expect("logger notification failed");
+                            } else {
+                                notification_sender
+                                    .send(LoggerOutput::Flushed)
+                                    .expect("logger notification failed");
+                            }
                         }
                         Ok(LoggerInput::Quit) => {
                             break;
