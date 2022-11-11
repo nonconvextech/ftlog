@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ftlog::appender::FileAppender;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    ftlog::LogBuilder::new()
+    ftlog::Builder::new()
         .root(FileAppender::new("bench.log"))
         .build()
         .unwrap()

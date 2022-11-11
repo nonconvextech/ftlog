@@ -2,12 +2,16 @@ use std::fmt::Display;
 
 use ftlog::{
     appender::{file::Period, FileAppender},
-    info, FtLogFormat, LogBuilder,
+    info, FtLogFormat,
 };
 use log::{Level, LevelFilter, Record};
 use time::Duration;
 fn init() {
-    // we can modify log style. Datetime format is fiex for performance
+    // Custom log style. Datetime format is fixed for performance
+
+    // A formatter defines how to build a message.
+    // Since Formatting message into string can slow down the log macro call,
+    // the idomatic way is to send required field as is to log thread, and build message in log thread.
     struct MyFormatter;
     impl FtLogFormat for MyFormatter {
         fn msg(&self, record: &Record) -> Box<dyn Send + Sync + std::fmt::Display> {
@@ -22,6 +26,7 @@ fn init() {
         }
     }
 
+    // Store necessary field, define how to build into string with `Display` trait.
     struct Msg {
         level: Level,
         thread: Option<String>,
@@ -45,9 +50,10 @@ fn init() {
         }
     }
 
-    let logger = LogBuilder::new()
+    let logger = ftlog::Builder::new()
         // use our own format
         .format(MyFormatter)
+        // global max log level
         .max_log_level(LevelFilter::Info)
         // define root appender, pass None would write to stderr
         .root(FileAppender::rotate_with_expire(
@@ -55,10 +61,23 @@ fn init() {
             Period::Minute,
             Duration::seconds(30),
         ))
+        // ---------- configure additional filter ----------
+        // write to "ftlog-appender" appender, with different level filter
+        .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+        // write to root appender, but with different level filter
+        .filter("ftlog", None, LevelFilter::Info)
+        // write to "ftlog" appender, with default level filter
+        .filter("ftlog::appender::file", "ftlog", None)
+        // ----------  configure additional appender ----------
+        // new appender
+        .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
+        // new appender, rotate to new file every Day
+        .appender("ftlog", FileAppender::rotate("ftlog.log", Period::Day))
         .build()
         .expect("logger build failed");
     logger.init().expect("set logger failed");
 }
+
 fn main() {
     init();
     info!("Hello, world!");
@@ -74,18 +93,23 @@ fn main() {
 /*
 Output:
 
-2022-10-30 22:21:27.878+08 0ms mainftlog/examples/ftlog.rs:37[INFO] Hello, world!
-2022-10-30 22:21:27.878+08 0ms mainftlog/examples/ftlog.rs:39[INFO] running 0!
-2022-10-30 22:21:27.878+08 0ms 0 mainftlog/examples/ftlog.rs:40[INFO] limit running0 !
-2022-10-30 22:21:28.883+08 0ms mainftlog/examples/ftlog.rs:39[INFO] running 1!
-2022-10-30 22:21:29.885+08 0ms mainftlog/examples/ftlog.rs:39[INFO] running 2!
-2022-10-30 22:21:30.890+08 0ms mainftlog/examples/ftlog.rs:39[INFO] running 3!
-2022-10-30 22:21:30.890+08 0ms 2 mainftlog/examples/ftlog.rs:40[INFO] limit running3 !
-2022-10-30 22:21:31.895+08 0ms mainftlog/examples/ftlog.rs:39[INFO] running 4!
-2022-10-30 22:21:32.900+08 0ms mainftlog/examples/ftlog.rs:39[INFO] running 5!
-2022-10-30 22:21:33.905+08 0ms mainftlog/examples/ftlog.rs:39[INFO] running 6!
-2022-10-30 22:21:33.905+08 0ms 2 mainftlog/examples/ftlog.rs:40[INFO] limit running6 !
-2022-10-30 22:21:34.907+08 0ms mainftlog/examples/ftlog.rs:39[INFO] running 7!
+2022-11-11 13:53:13.933+08 0ms main@complex||examples/complex.rs:83[INFO] Hello, world!
+2022-11-11 13:53:13.934+08 1ms main@complex||examples/complex.rs:85[INFO] running 0!
+2022-11-11 13:53:13.934+08 3ms 0 main@complex||examples/complex.rs:86[INFO] limit running0 !
+2022-11-11 13:53:13.934+08 3ms logger@ftlog::appender::file||src/appender/file.rs:255[INFO] Log file deleted: current-20221111T1352.log
+2022-11-11 13:53:14.939+08 0ms main@complex||examples/complex.rs:85[INFO] running 1!
+2022-11-11 13:53:15.939+08 0ms main@complex||examples/complex.rs:85[INFO] running 2!
+2022-11-11 13:53:16.943+08 0ms main@complex||examples/complex.rs:85[INFO] running 3!
+2022-11-11 13:53:16.943+08 0ms 2 main@complex||examples/complex.rs:86[INFO] limit running3 !
+2022-11-11 13:53:17.945+08 0ms main@complex||examples/complex.rs:85[INFO] running 4!
+2022-11-11 13:53:18.946+08 0ms main@complex||examples/complex.rs:85[INFO] running 5!
+2022-11-11 13:53:19.951+08 0ms main@complex||examples/complex.rs:85[INFO] running 6!
+2022-11-11 13:53:19.951+08 0ms 2 main@complex||examples/complex.rs:86[INFO] limit running6 !
+2022-11-11 13:53:20.956+08 0ms main@complex||examples/complex.rs:85[INFO] running 7!
+2022-11-11 13:53:21.961+08 0ms main@complex||examples/complex.rs:85[INFO] running 8!
+2022-11-11 13:53:22.966+08 0ms main@complex||examples/complex.rs:85[INFO] running 9!
+2022-11-11 13:53:22.966+08 4ms 2 main@complex||examples/complex.rs:86[INFO] limit running9 !
+
 
 Default style example:
 2022-04-11 15:08:19.847+08 0ms INFO main/src/main.rs:25 Hello, world!
@@ -98,11 +122,3 @@ Default style example:
 2022-04-11 15:08:23.862+08 0ms INFO main/src/main.rs:28 running 4!
 2022-04-11 15:08:24.864+08 0ms INFO main/src/main.rs:28 running 5!
  */
-
-// fn test {
-
-//     ftlog::Logger::builder()
-//     .root()
-//     .build();
-
-//  }

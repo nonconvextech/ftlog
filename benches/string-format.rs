@@ -16,7 +16,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         }
     }
 
-    ftlog::LogBuilder::new()
+    ftlog::Builder::new()
         .format(StringFormatter)
         .root(FileAppender::new("bench.log"))
         .build()
