@@ -42,7 +42,6 @@ impl FileAppender {
         }
     }
 
-    // TODO custom format
     fn file<T: AsRef<Path>>(path: T, period: Period) -> PathBuf {
         let p = path.as_ref();
         let tm = time::now();
@@ -213,7 +212,7 @@ impl Write for FileAppender {
                     .filter(|x| {
                         let p = x.path();
                         let name = p.file_stem().unwrap().to_string_lossy();
-                        if let Some((_, time)) = name.rsplit_once("-") {
+                        if let Some((stem, time)) = name.rsplit_once("-") {
                             let check = |(ix, x): (usize, char)| match ix {
                                 8 => x == 'T',
                                 _ => x.is_digit(10),
@@ -226,6 +225,11 @@ impl Write for FileAppender {
                                 Period::Year => time.len() == 4,
                             };
                             len && time.chars().enumerate().all(check)
+                                && self
+                                    .path
+                                    .file_stem()
+                                    .map(|x| x.to_string_lossy() == stem)
+                                    .unwrap_or(false)
                         } else {
                             false
                         }
@@ -248,7 +252,7 @@ impl Write for FileAppender {
                     .collect::<Vec<_>>()
                     .join(", ");
                 if !del_msg.is_empty() {
-                    crate::info!("Log file deleted: {}", del_msg)
+                    crate::info!("Log file deleted: {}", del_msg);
                 }
             };
             if start.to(PreciseTime::now()) > *wait {
