@@ -172,7 +172,9 @@
 //! logger.init().unwrap();
 //! ```
 
-pub use log::{debug, error, info, log, log_enabled, trace, warn, Level, LevelFilter, Record};
+pub use log::{
+    debug, error, info, log, log_enabled, logger, trace, warn, Level, LevelFilter, Record,
+};
 
 use std::borrow::Cow;
 use std::collections::HashMap;
