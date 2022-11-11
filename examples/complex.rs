@@ -65,7 +65,7 @@ fn init() {
         // write to "ftlog-appender" appender, with different level filter
         .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
         // write to root appender, but with different level filter
-        .filter("ftlog", None, LevelFilter::Info)
+        .filter("ftlog", None, LevelFilter::Trace)
         // write to "ftlog" appender, with default level filter
         .filter("ftlog::appender::file", "ftlog", None)
         // ----------  configure additional appender ----------
@@ -93,6 +93,7 @@ fn main() {
 /*
 Output:
 
+2022-11-11 13:53:13.933+08 0ms logger@ftlog||src/lib.rs:439[WARN] Logs with level more verbose than INFO will be ignored in `ftlog`
 2022-11-11 13:53:13.933+08 0ms main@complex||examples/complex.rs:83[INFO] Hello, world!
 2022-11-11 13:53:13.934+08 1ms main@complex||examples/complex.rs:85[INFO] running 0!
 2022-11-11 13:53:13.934+08 3ms 0 main@complex||examples/complex.rs:86[INFO] limit running0 !

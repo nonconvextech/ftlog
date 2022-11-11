@@ -35,7 +35,7 @@
 //!
 //! 也可以直接输出到固定文件，完整的配置用法如下:
 //!
-//! ```rust
+//! ```rust,no_run
 //! use ftlog::{appender::{Period, FileAppender}, LevelFilter, Record, FtLogFormat};
 //!
 //! // 完整用法
@@ -80,7 +80,9 @@
 //!
 //! ## 用法
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! use ftlog::{trace, debug};
+//! use log::{info, warn ,error};
 //! trace!("Hello world!");
 //! debug!("Hello world!");
 //! info!("Hello world!");
@@ -89,7 +91,7 @@
 //! ```
 //!
 //! 在main最后加入flush，否则在程序结束时未写入的日志会丢失：
-//! ```rust,ignore
+//! ```rust,no_run
 //! ftlog::logger().flush();
 //! ```
 //!
@@ -430,6 +432,17 @@ impl Builder {
             .spawn(move || {
                 let mut appenders = self.appenders;
                 let filters = filters;
+
+                for filter in &filters {
+                    if let Some(level) = filter.level {
+                        if self.level < level {
+                            warn!(
+                                "Logs with level more verbose than {} will be ignored in `{}` ",
+                                self.level, filter.path,
+                            );
+                        }
+                    }
+                }
 
                 let mut root: Box<dyn Write + Send> = match self.root {
                     Some(w) => w,
