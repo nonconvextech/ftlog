@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     fs::{File, OpenOptions},
-    io::Write,
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
 };
 
@@ -23,7 +23,7 @@ struct Rotate {
 }
 
 pub struct FileAppender {
-    file: File,
+    file: BufWriter<File>,
     path: PathBuf,
     rotate: Option<Rotate>,
 }
@@ -32,11 +32,13 @@ impl FileAppender {
     pub fn new<T: AsRef<Path>>(path: T) -> Self {
         let p = path.as_ref();
         Self {
-            file: OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(p)
-                .unwrap(),
+            file: BufWriter::new(
+                OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(p)
+                    .unwrap(),
+            ),
             path: p.to_path_buf(),
             rotate: None,
         }
@@ -100,11 +102,13 @@ impl FileAppender {
         let p = path.as_ref();
         let (start, wait) = Self::until(period);
         let path = Self::file(&p, period);
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .unwrap();
+        let file = BufWriter::new(
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .unwrap(),
+        );
         Self {
             file,
             path: p.to_path_buf(),
@@ -122,11 +126,13 @@ impl FileAppender {
         let p = path.as_ref();
         let (start, wait) = Self::until(period);
         let path = Self::file(&p, period);
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .unwrap();
+        let file = BufWriter::new(
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .unwrap(),
+        );
         Self {
             file,
             path: p.to_path_buf(),
@@ -259,11 +265,13 @@ impl Write for FileAppender {
                 // close current file and create new file
                 self.file.flush()?;
                 let path = Self::file(&self.path, *period);
-                self.file = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(path)
-                    .unwrap();
+                self.file = BufWriter::new(
+                    OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path)
+                        .unwrap(),
+                );
                 (*start, *wait) = Self::until(*period);
             }
         };
