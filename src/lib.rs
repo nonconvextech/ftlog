@@ -173,7 +173,6 @@
 //!     .unwrap();
 //! logger.init().unwrap();
 //! ```
-
 pub use log::{
     debug, error, info, log, log_enabled, logger, trace, warn, Level, LevelFilter, Record,
 };
@@ -182,7 +181,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::{stderr, Error as IoError, Write};
+use std::time::{Duration, Instant};
 
+use crossbeam_channel::TryRecvError;
 use fxhash::FxHashMap;
 use log::kv::Key;
 use log::{set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
@@ -450,8 +451,9 @@ impl Builder {
                 };
                 let mut last_log = FxHashMap::default();
                 let mut missed_log = FxHashMap::default();
+                let mut last_flush = Instant::now();
                 loop {
-                    match receiver.recv() {
+                    match receiver.try_recv() {
                         Ok(LoggerInput::LogMsg(LogMsg {
                             tm,
                             msg,
@@ -543,6 +545,9 @@ impl Builder {
                         Ok(LoggerInput::Quit) => {
                             break;
                         }
+                        Err(TryRecvError::Empty) => {
+                            std::thread::sleep(Duration::from_micros(200));
+                        }
                         Err(e) => {
                             panic!(
                                 "sender closed without sending a Quit first, this is a bug, {}",
@@ -550,6 +555,16 @@ impl Builder {
                             );
                         }
                     }
+                    if last_flush.elapsed() > Duration::from_millis(1000) {
+                        let flush_errors = appenders
+                            .values_mut()
+                            .chain([&mut root])
+                            .filter_map(|w| w.flush().err());
+                        for err in flush_errors {
+                            log::warn!("Ftlog flush error: {}", err);
+                        }
+                        last_flush = Instant::now();
+                    };
                 }
             })?;
         Ok(Logger {
