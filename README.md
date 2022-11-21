@@ -257,11 +257,15 @@ logger.init().unwrap();
 
 ## Performance
 
-|  | Apple M1 Pro, 3.2GHz, Rust：1.67.0-nightly |  |
-| ----------| --------- | ---------- |
-| `ftlog` output to file | 156 ns/iter (+/- 23) | 1,636 ns/iter (+/- 229) |
-| `env_logger` output to file | 1,636 ns/iter (+/- 229) | 1,636 ns/iter (+/- 229) |
-| `ftlog` output to file with `BufWriter` | 154 ns/iter (+/- 23) | 274 ns/iter (+/- 41) |
-| `env_logger` output to file with `BufWriter` | 274 ns/iter (+/- 41) | 607 ns/iter (+/- 41) |
+> Rust：1.67.0-nightly
+
+|                                                   |  message type | Apple M1 Pro, 3.2GHz  | AMD EPYC 7T83, 3.2GHz |
+| ------------------------------------------------- | ------------- | --------------------- | --------------------- |
+| `ftlog`                                           | static string |   89 ns/iter (±22)    | 197 ns/iter (±232)    |
+| `ftlog`                                           | with i32      |   123 ns/iter (±31)   | 263 ns/iter (±124)    |
+| `env_logger` <br/> output to file                 | static string | 1,674 ns/iter (±123)  | 1,142 ns/iter (±56)   |
+| `env_logger` <br/> output to file                 | with i32      | 1,681 ns/iter (±59)   | 1,179 ns/iter (±46)   |
+| `env_logger` <br/> output to file with `BufWriter`| static string | 279 ns/iter (±43)     | 550 ns/iter (±96)     |
+| `env_logger` <br/> output to file with `BufWriter`| with i32      | 278 ns/iter (±53)     | 565 ns/iter (±95)     |
 
 License: MIT OR Apache-2.0
