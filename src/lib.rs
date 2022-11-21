@@ -278,7 +278,7 @@ use std::fmt::Display;
 use std::io::{stderr, Error as IoError, Write};
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender, TryRecvError};
+use crossbeam_channel::{bounded, unbounded, Receiver, Sender, TryRecvError, TrySendError};
 use fxhash::FxHashMap;
 use log::kv::Key;
 use log::{set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
@@ -313,6 +313,7 @@ pub trait FtLogFormat: Send + Sync {
 /// Default ftlog formatter
 pub struct FtLogFormatter;
 impl FtLogFormat for FtLogFormatter {
+    #[inline]
     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display> {
         Box::new(Message {
             level: record.level(),
@@ -355,6 +356,7 @@ pub struct Logger {
     queue: Sender<LoggerInput>,
     notification: Receiver<LoggerOutput>,
     worker_thread: Option<std::thread::JoinHandle<()>>,
+    block: bool,
 }
 
 impl Logger {
@@ -394,16 +396,27 @@ impl Log for Logger {
             }
             hash_id
         };
-        self.queue
-            .send(LoggerInput::LogMsg(LogMsg {
-                tm: get_time(),
-                msg: msg,
-                target: record.target().to_owned(),
-                level: record.level(),
-                limit,
-                limit_key,
-            }))
-            .expect("logger queue closed when logging, this is a bug")
+        let msg = LoggerInput::LogMsg(LogMsg {
+            tm: get_time(),
+            msg: msg,
+            target: record.target().to_owned(),
+            level: record.level(),
+            limit,
+            limit_key,
+        });
+        if self.block {
+            self.queue
+                .send(msg)
+                .expect("logger queue closed when logging, this is a bug")
+        } else {
+            match self.queue.try_send(msg) {
+                Err(TrySendError::Disconnected(_)) => {
+                    panic!("logger queue closed when logging, this is a bug")
+                }
+                // TODO warn discarded messages
+                _ => (),
+            }
+        }
     }
 
     fn flush(&self) {
@@ -431,12 +444,18 @@ impl Drop for Logger {
     }
 }
 
+struct BoundedChannelOption {
+    size: usize,
+    block: bool,
+}
+
 pub struct Builder {
     format: Box<dyn FtLogFormat>,
     level: LevelFilter,
     root: Option<Box<dyn Write + Send>>,
     appenders: HashMap<&'static str, Box<dyn Write + Send + 'static>>,
     filters: Vec<Directive>,
+    bounded_channel_option: Option<BoundedChannelOption>,
 }
 
 #[inline]
@@ -459,12 +478,31 @@ impl Builder {
             root: None,
             appenders: HashMap::new(),
             filters: Vec::new(),
+            bounded_channel_option: Some(BoundedChannelOption {
+                size: 100_000,
+                block: false,
+            }),
         }
     }
 
     #[inline]
     pub fn format<F: FtLogFormat + 'static>(mut self, format: F) -> Builder {
         self.format = Box::new(format);
+        self
+    }
+
+    #[inline]
+    pub fn bounded(mut self, size: usize, block_when_full: bool) -> Builder {
+        self.bounded_channel_option = Some(BoundedChannelOption {
+            size,
+            block: block_when_full,
+        });
+        self
+    }
+
+    #[inline]
+    pub fn unbounded(mut self) -> Builder {
+        self.bounded_channel_option = None;
         self
     }
 
@@ -521,7 +559,10 @@ impl Builder {
             }
         }
 
-        let (sync_sender, receiver) = unbounded();
+        let (sync_sender, receiver) = match &self.bounded_channel_option {
+            None => unbounded(),
+            Some(option) => bounded(option.size),
+        };
         let (notification_sender, notification_receiver) = bounded(1);
         let worker_thread = std::thread::Builder::new()
             .name("logger".to_string())
@@ -668,6 +709,11 @@ impl Builder {
             queue: sync_sender,
             notification: notification_receiver,
             worker_thread: Some(worker_thread),
+            block: self
+                .bounded_channel_option
+                .as_ref()
+                .map(|x| x.block)
+                .unwrap_or(false),
         })
     }
 }
