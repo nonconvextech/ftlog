@@ -11,7 +11,8 @@ fn init() {
 
     // A formatter defines how to build a message.
     // Since Formatting message into string can slow down the log macro call,
-    // the idomatic way is to send required field as is to log thread, and build message in log thread.
+    // the idomatic way is to send required field as is to log thread, and build
+    // message in log thread.
     struct MyFormatter;
     impl FtLogFormat for MyFormatter {
         fn msg(&self, record: &Record) -> Box<dyn Send + Sync + std::fmt::Display> {
