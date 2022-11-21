@@ -215,15 +215,7 @@ impl Write for FileAppender {
                 // close current file and create new file
                 self.file.flush()?;
                 let path = Self::file(&self.path, *period);
-                self.file = BufWriter::new(
-                    OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(path)
-                        .unwrap(),
-                );
-                (*start, *wait) = Self::until(*period);
-
+                // remove outdated log files
                 if let Some(keep_duration) = keep {
                     let to_remove = std::fs::read_dir(self.path.parent().unwrap())
                         .unwrap()
@@ -275,6 +267,16 @@ impl Write for FileAppender {
                         crate::info!("Log file deleted: {}", del_msg);
                     }
                 };
+
+                // rotate file
+                self.file = BufWriter::new(
+                    OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path)
+                        .unwrap(),
+                );
+                (*start, *wait) = Self::until(*period);
             }
         };
         self.file.write_all(record).map(|_| record.len())
