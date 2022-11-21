@@ -274,7 +274,7 @@ use std::fmt::Display;
 use std::io::{stderr, Error as IoError, Write};
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::TryRecvError;
+use crossbeam_channel::{bounded, unbounded, Receiver, Sender, TryRecvError};
 use fxhash::FxHashMap;
 use log::kv::Key;
 use log::{set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
@@ -348,8 +348,8 @@ impl Display for Message {
 pub struct Logger {
     format: Box<dyn FtLogFormat>,
     level: LevelFilter,
-    queue: crossbeam_channel::Sender<LoggerInput>,
-    notification: crossbeam_channel::Receiver<LoggerOutput>,
+    queue: Sender<LoggerInput>,
+    notification: Receiver<LoggerOutput>,
     worker_thread: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -517,8 +517,8 @@ impl Builder {
             }
         }
 
-        let (sync_sender, receiver) = crossbeam_channel::unbounded();
-        let (notification_sender, notification_receiver) = crossbeam_channel::bounded(1);
+        let (sync_sender, receiver) = unbounded();
+        let (notification_sender, notification_receiver) = bounded(1);
         let worker_thread = std::thread::Builder::new()
             .name("logger".to_string())
             .spawn(move || {
@@ -637,16 +637,6 @@ impl Builder {
                             break;
                         }
                         Err(TryRecvError::Empty) => {
-                            if last_flush.elapsed() > Duration::from_millis(1000) {
-                                let flush_errors = appenders
-                                    .values_mut()
-                                    .chain([&mut root])
-                                    .filter_map(|w| w.flush().err());
-                                for err in flush_errors {
-                                    log::warn!("Ftlog flush error: {}", err);
-                                }
-                                last_flush = Instant::now();
-                            };
                             std::thread::sleep(Duration::from_micros(200));
                         }
                         Err(e) => {
@@ -656,6 +646,16 @@ impl Builder {
                             );
                         }
                     }
+                    if last_flush.elapsed() > Duration::from_millis(1000) {
+                        let flush_errors = appenders
+                            .values_mut()
+                            .chain([&mut root])
+                            .filter_map(|w| w.flush().err());
+                        for err in flush_errors {
+                            log::warn!("Ftlog flush error: {}", err);
+                        }
+                        last_flush = Instant::now();
+                    };
                 }
             })?;
         Ok(Logger {
