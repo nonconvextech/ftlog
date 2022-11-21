@@ -19,8 +19,9 @@ impl FtLogFormat for StringFormatter {
 #[bench]
 fn static_string(b: &mut test::Bencher) {
     ftlog::Builder::new()
+        .bounded(10_000, false)
         .format(StringFormatter)
-        .root(FileAppender::new("bench.log"))
+        .root(FileAppender::new("bench-string.log"))
         .build()
         .unwrap()
         .init()
@@ -28,6 +29,7 @@ fn static_string(b: &mut test::Bencher) {
     b.iter(|| {
         ftlog::info!("ftlog message");
     });
+    log::logger().flush();
 }
 
 #[bench]
@@ -36,4 +38,5 @@ fn with_i32(b: &mut test::Bencher) {
     b.iter(|| {
         ftlog::info!("ftlog: {}", i);
     });
+    log::logger().flush();
 }

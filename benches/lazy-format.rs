@@ -5,7 +5,8 @@ use ftlog::appender::FileAppender;
 #[bench]
 fn static_string(b: &mut test::Bencher) {
     ftlog::Builder::new()
-        .root(FileAppender::new("bench.log"))
+        .root(FileAppender::new("bench-lazy.log"))
+        .bounded(10_000, false)
         .build()
         .unwrap()
         .init()
@@ -13,6 +14,7 @@ fn static_string(b: &mut test::Bencher) {
     b.iter(|| {
         ftlog::info!("ftlog message");
     });
+    log::logger().flush();
 }
 
 #[bench]
@@ -21,4 +23,5 @@ fn with_i32(b: &mut test::Bencher) {
     b.iter(|| {
         ftlog::info!("ftlog: {}", i);
     });
+    log::logger().flush();
 }
