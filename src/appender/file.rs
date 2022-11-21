@@ -121,7 +121,8 @@ impl FileAppender {
         }
     }
 
-    /// Create a file appender with rotate, auto delete logs that last modified before given expire duration
+    /// Create a file appender with rotate, auto delete logs that last modified
+    /// before given expire duration
     pub fn rotate_with_expire<T: AsRef<Path>>(path: T, period: Period, keep: Duration) -> Self {
         let p = path.as_ref();
         let (start, wait) = Self::until(period);
@@ -210,57 +211,6 @@ impl Write for FileAppender {
             keep,
         }) = &mut self.rotate
         {
-            if let Some(keep_duration) = keep {
-                let to_remove = std::fs::read_dir(self.path.parent().unwrap())
-                    .unwrap()
-                    .filter_map(|f| f.ok())
-                    .filter(|x| x.file_type().map(|x| x.is_file()).unwrap_or(false))
-                    .filter(|x| {
-                        let p = x.path();
-                        let name = p.file_stem().unwrap().to_string_lossy();
-                        if let Some((stem, time)) = name.rsplit_once("-") {
-                            let check = |(ix, x): (usize, char)| match ix {
-                                8 => x == 'T',
-                                _ => x.is_digit(10),
-                            };
-                            let len = match period {
-                                Period::Minute => time.len() == 13,
-                                Period::Hour => time.len() == 11,
-                                Period::Day => time.len() == 8,
-                                Period::Month => time.len() == 6,
-                                Period::Year => time.len() == 4,
-                            };
-                            len && time.chars().enumerate().all(check)
-                                && self
-                                    .path
-                                    .file_stem()
-                                    .map(|x| x.to_string_lossy() == stem)
-                                    .unwrap_or(false)
-                        } else {
-                            false
-                        }
-                    })
-                    .filter(|x| {
-                        x.metadata()
-                            .ok()
-                            .and_then(|x| x.modified().ok())
-                            .map(|time| {
-                                time.elapsed()
-                                    .map(|elapsed| elapsed > *keep_duration)
-                                    .unwrap_or(false)
-                            })
-                            .unwrap_or(false)
-                    });
-
-                let del_msg = to_remove
-                    .filter(|f| std::fs::remove_file(f.path()).is_ok())
-                    .map(|x| x.file_name().to_string_lossy().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                if !del_msg.is_empty() {
-                    crate::info!("Log file deleted: {}", del_msg);
-                }
-            };
             if start.to(PreciseTime::now()) > *wait {
                 // close current file and create new file
                 self.file.flush()?;
@@ -273,6 +223,58 @@ impl Write for FileAppender {
                         .unwrap(),
                 );
                 (*start, *wait) = Self::until(*period);
+
+                if let Some(keep_duration) = keep {
+                    let to_remove = std::fs::read_dir(self.path.parent().unwrap())
+                        .unwrap()
+                        .filter_map(|f| f.ok())
+                        .filter(|x| x.file_type().map(|x| x.is_file()).unwrap_or(false))
+                        .filter(|x| {
+                            let p = x.path();
+                            let name = p.file_stem().unwrap().to_string_lossy();
+                            if let Some((stem, time)) = name.rsplit_once("-") {
+                                let check = |(ix, x): (usize, char)| match ix {
+                                    8 => x == 'T',
+                                    _ => x.is_digit(10),
+                                };
+                                let len = match period {
+                                    Period::Minute => time.len() == 13,
+                                    Period::Hour => time.len() == 11,
+                                    Period::Day => time.len() == 8,
+                                    Period::Month => time.len() == 6,
+                                    Period::Year => time.len() == 4,
+                                };
+                                len && time.chars().enumerate().all(check)
+                                    && self
+                                        .path
+                                        .file_stem()
+                                        .map(|x| x.to_string_lossy() == stem)
+                                        .unwrap_or(false)
+                            } else {
+                                false
+                            }
+                        })
+                        .filter(|x| {
+                            x.metadata()
+                                .ok()
+                                .and_then(|x| x.modified().ok())
+                                .map(|time| {
+                                    time.elapsed()
+                                        .map(|elapsed| elapsed > *keep_duration)
+                                        .unwrap_or(false)
+                                })
+                                .unwrap_or(false)
+                        });
+
+                    let del_msg = to_remove
+                        .filter(|f| std::fs::remove_file(f.path()).is_ok())
+                        .map(|x| x.file_name().to_string_lossy().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if !del_msg.is_empty() {
+                        crate::info!("Log file deleted: {}", del_msg);
+                    }
+                };
             }
         };
         self.file.write_all(record).map(|_| record.len())
