@@ -55,7 +55,7 @@ A more complicated but feature rich usage:
 ```rust
 use ftlog::{
     appender::{Duration, FileAppender, Period},
-    FtLogFormat, LevelFilter, Record,
+    FtLogFormatter, LevelFilter,
 };
 
 // configurate logger

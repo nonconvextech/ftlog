@@ -54,7 +54,7 @@
 //! ```rust,no_run
 //! use ftlog::{
 //!     appender::{Duration, FileAppender, Period},
-//!     FtLogFormat, LevelFilter, Record,
+//!     FtLogFormatter, LevelFilter,
 //! };
 //!
 //! // configurate logger
