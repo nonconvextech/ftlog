@@ -25,6 +25,3 @@ name = "lazy-format"
 
 [[bench]]
 name = "string-format"
-
-[dev-dependencies]
-env_logger = "0.9"
