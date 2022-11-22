@@ -286,7 +286,13 @@ impl Write for FileAppender {
                 let path = Self::file(&self.path, *period);
                 // remove outdated log files
                 if let Some(keep_duration) = keep {
-                    let to_remove = std::fs::read_dir(self.path.parent().unwrap())
+                    let dir = self.path.parent().unwrap().to_path_buf();
+                    let dir = if dir.is_dir() {
+                        dir
+                    } else {
+                        PathBuf::from(".")
+                    };
+                    let to_remove = std::fs::read_dir(dir)
                         .unwrap()
                         .filter_map(|f| f.ok())
                         .filter(|x| x.file_type().map(|x| x.is_file()).unwrap_or(false))

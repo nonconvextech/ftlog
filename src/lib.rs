@@ -4,18 +4,18 @@
 //! [![Latest Version](https://img.shields.io/crates/v/ftlog.svg)](https://crates.io/crates/ftlog)
 //! [![ftlog](https://docs.rs/ftlog/badge.svg)](https://docs.rs/ftlog)
 //!
-//! Logging is affected by disk IO and pipe system call.
-//! Sequencial log call can a bottleneck in scenario where low
-//! latency is critical (e.g. high frequency trading).
+//! Logging is affected by the disk IO and pipe system call.
+//! Sequential log calls can be a bottleneck in scenarios where low
+//! latency is critical (e.g., high-frequency trading).
 //!
-//! `ftlog` alleviates this bootleneck by sending message to dedicated logger
-//! thread, and computing as little as possible in main/worker thread.
+//! `ftlog` mitigates this bottleneck by sending messages to a dedicated logger
+//! thread and computing as little as possible in the main/worker thread.
 //!
-//! `ftlog` can boost log performance by **times** in main/worker thread. See
+//! `ftlog` can improve log performance in main/worker thread a few times over. See
 //! performance for details.
 //!
-//! **CAUTION**: this crate use `unchecked_math` unstable feature and `unsafe`
-//! code. Only use this crate in rust `nightly` channel.
+//! **CAUTION**: This crate uses the `unchecked_math` unstable feature and `unsafe`
+//! code. Use this crate only in rust `nightly` channel.
 //!
 //!
 //! # Usage
@@ -87,35 +87,34 @@
 //!
 //! ## Default Log Format
 //!
-//! Datetime format is fixed for performance.
+//! The datetime format is fixed for performance reasons.
 //!
 //! > 2022-04-08 19:20:48.190+08 **298ms** INFO main@src/ftlog.rs:14 My log
 //! > message
 //!
-//! Here `298ms` denotes the latency between log macros call (e.g.
-//! `log::info!("msg")`) and actual printing in log thread. Normally this will
-//! be 0ms.
+//! Here `298ms` denotes the latency between the call of the log (e.g.
+//! `log::info!("msg")`) and the actual printing in log thread. Normally this is 0ms.
 //!
-//! A large delay indicates log thread might be blocked by excessive log
+//! A large delay indicates that the log thread may be blocked by excessive log
 //! messages.
 //!
 //! > 2022-04-10 21:27:15.996+08 0ms **2** INFO main@src/main.rs:29 limit
 //! > running3 !
 //!
-//! The number **2** above shows how many log messages have been discarded.
-//! Only shown when limiting logging interval for a single log call (e.g.
+//! The number **2** above indicates how many log messages were discarded.
+//! Only shown if the frequency of logging for a single log call is limited (e.g.
 //! `log::info!(limit=3000;"msg")`).
 //!
 //! ## Log with interval
 //!
-//! `ftlog` allows restriction on writing frequency for single log call.
+//! `ftlog` allows to limit the write frequency for individual log calls.
 //!
-//! If the above line is called multiple times within 3000ms, then it will only
-//! log once with a added number donates the number of discarded log message.
+//! If the above line is called multiple times within 3000ms, then it is logged only
+//! once, with an added number reflecting the number of discarded log messages.
 //!
-//! Each log call owns independent interval, so we can set different interval
-//! for different log call. Internally, `ftlog` records last print time by a
-//! combination of (module name, file name, line of code).
+//! Each log call ha an independent interval, so we can set different intervals
+//! for different log calls. Internally, `ftlog` records the last print time by a
+//! combination of (module name, file name, code line).
 //!
 //! ### Example
 //!
@@ -129,7 +128,7 @@
 //! 2022-04-10 21:27:10.996+08 0ms 0 INFO main@src/main.rs:29 limit running 3s !
 //! 2022-04-10 21:27:15.996+08 0ms 2 INFO main@src/main.rs:29 limit running 3s !
 //! ```
-//! The number **2** above shows how many log messages have been discarded since last log.
+//! The number **2** above shows how many log messages is discarded since last log.
 //!
 //! ## Log rotation
 //! `ftlog` supports log rotation in local timezone. The available rotation
@@ -141,8 +140,8 @@
 //! - month `Period::Month`
 //! - year `Period::Year`
 //!
-//! Log rotation is configured in `FileAppender`, and datetime will be added to
-//! the end of filename:
+//! Log rotation is configured in `FileAppender`, and the timestamp is appended to
+//! the end of the filename:
 //!
 //! ```rust
 //! use ftlog::appender::{FileAppender, Period};
@@ -154,9 +153,9 @@
 //! logger.init().unwrap();
 //! ```
 //!
-//! When configured to divide log file by minutes,
-//! the file name of log file is in the format of
-//! `mylog-{MMMM}{YY}{DD}T{hh}{mm}.log`. When by days, the log file names is
+//! If the log file is configued to be split by minutes,
+//! the log file name has the format
+//! `mylog-{MMMM}{YY}{DD}T{hh}{mm}.log`. When divided by days, the log file name is
 //! something like `mylog-{MMMM}{YY}{DD}.log`.
 //!
 //! Log filename examples:
@@ -222,6 +221,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::{stderr, Error as IoError, Write};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender, TryRecvError, TrySendError};
@@ -364,6 +364,11 @@ impl Display for Message {
     }
 }
 
+struct DiscardState {
+    last: Instant,
+    count: usize,
+}
+
 /// ftlog global logger
 pub struct Logger {
     format: Box<dyn FtLogFormat>,
@@ -372,6 +377,7 @@ pub struct Logger {
     notification: Receiver<LoggerOutput>,
     worker_thread: Option<std::thread::JoinHandle<()>>,
     block: bool,
+    discard_state: Option<Mutex<DiscardState>>,
 }
 
 impl Logger {
@@ -425,10 +431,26 @@ impl Log for Logger {
                 .expect("logger queue closed when logging, this is a bug")
         } else {
             match self.queue.try_send(msg) {
+                Err(TrySendError::Full(_)) => {
+                    if self.discard_state.is_some() {
+                        let count = {
+                            let mut lock = self.discard_state.as_ref().unwrap().lock().unwrap();
+                            lock.count += 1;
+                            if lock.last.elapsed().as_secs() >= 5 {
+                                lock.last = Instant::now();
+                                Some(lock.count)
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(c) = count {
+                            eprintln!("Excessive log messages. Log omitted: {}", c);
+                        }
+                    }
+                }
                 Err(TrySendError::Disconnected(_)) => {
                     panic!("logger queue closed when logging, this is a bug")
                 }
-                // TODO warn discarded messages
                 _ => (),
             }
         }
@@ -462,6 +484,7 @@ impl Drop for Logger {
 struct BoundedChannelOption {
     size: usize,
     block: bool,
+    print: bool,
 }
 
 /// Ftlog builder
@@ -535,6 +558,7 @@ impl Builder {
             bounded_channel_option: Some(BoundedChannelOption {
                 size: 100_000,
                 block: false,
+                print: false,
             }),
         }
     }
@@ -551,12 +575,26 @@ impl Builder {
     /// When `block_when_full` is true, it will block current thread where
     /// log macro (e.g. `log::info`) is called until log thread is able to handle new message.
     /// Otherwises, excessive log messages will be discarded.
+    ///
+    /// By default, excessive log messages is discarded silently. To show how many log
+    /// messages have been dropped, see `Builder::print_omitted_count()`.
     #[inline]
     pub fn bounded(mut self, size: usize, block_when_full: bool) -> Builder {
         self.bounded_channel_option = Some(BoundedChannelOption {
             size,
             block: block_when_full,
+            print: false,
         });
+        self
+    }
+
+    /// whether to print the number of omitted logs if channel to log
+    /// thread is bounded, and set to discard excessive log messages
+    #[inline]
+    pub fn print_omitted_count(mut self, print: bool) -> Builder {
+        self.bounded_channel_option
+            .as_mut()
+            .map(|o| o.print = print);
         self
     }
 
@@ -787,17 +825,31 @@ impl Builder {
                     };
                 }
             })?;
+        let block = self
+            .bounded_channel_option
+            .as_ref()
+            .map(|x| x.block)
+            .unwrap_or(false);
+        let print = self
+            .bounded_channel_option
+            .as_ref()
+            .map(|x| x.print)
+            .unwrap_or(false);
         Ok(Logger {
             format: self.format,
             level: self.level,
             queue: sync_sender,
             notification: notification_receiver,
             worker_thread: Some(worker_thread),
-            block: self
-                .bounded_channel_option
-                .as_ref()
-                .map(|x| x.block)
-                .unwrap_or(false),
+            block,
+            discard_state: if block || !print {
+                None
+            } else {
+                Some(Mutex::new(DiscardState {
+                    last: Instant::now(),
+                    count: 0,
+                }))
+            },
         })
     }
 }
