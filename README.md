@@ -62,6 +62,8 @@ use ftlog::{
 let logger = ftlog::builder()
     // global max log level
     .max_log_level(LevelFilter::Info)
+    // global log formatter, timestamp is fixed for performance
+    .format(FtLogFormatter)
     // use bounded channel to avoid large memory comsumption when overwhelmed with logs
     // Set `false` to tell ftlog to discard excessive logs.
     // Set `true` to block log call to wait for log thread.
