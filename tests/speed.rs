@@ -43,7 +43,7 @@ fn clean(dir: &str) {
 fn test_speed() {
     // ~80MB
     setup();
-    {
+    let elapsed1 = {
         // file
         let now = Instant::now();
         for i in 1..=1_000_000 {
@@ -52,11 +52,10 @@ fn test_speed() {
         ftlog::logger().flush();
         let elapsed = now.elapsed();
         println!("File elapsed: {}s", elapsed.as_secs_f64());
-        clean("./");
-        assert!(elapsed.as_secs() < 8);
-    }
+        elapsed
+    };
 
-    {
+    let elapsed2 = {
         // file with rotate
         let now = Instant::now();
         for i in 1..=1_000_000 {
@@ -65,11 +64,10 @@ fn test_speed() {
         ftlog::logger().flush();
         let elapsed = now.elapsed();
         println!("Rotate file elapsed: {}s", elapsed.as_secs_f64());
-        clean("./");
-        assert!(elapsed.as_secs() < 8);
-    }
+        elapsed
+    };
 
-    {
+    let elapsed3 = {
         // file with rotate with expire
         let now = Instant::now();
         for i in 1..=1_000_000 {
@@ -81,7 +79,10 @@ fn test_speed() {
             "Rotate file with expire elapsed: {}s",
             elapsed.as_secs_f64()
         );
-        clean("./");
-        assert!(elapsed.as_secs() < 8);
-    }
+        elapsed
+    };
+    clean("./");
+    assert!(elapsed1.as_secs() < 8);
+    assert!(elapsed2.as_secs() < 8);
+    assert!(elapsed3.as_secs() < 8);
 }
