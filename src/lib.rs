@@ -27,114 +27,67 @@
 //! ```
 //!
 //! Configure and initialize ftlog at the start of your `main` function:
-//! ```rust
+//! ```
 //! // ftlog re-export `log`'s macros, so no need to add `log` to dependencies
+//! use ftlog::appender::FileAppender;
 //! use ftlog::{debug, trace};
 //! use log::{error, info, warn};
 //!
-//! fn main() {
-//!     // minimal configuration with default setting
-//!     // define root appender, pass None would write to stderr
-//!     let dest = FileAppender::new("./current.log");
-//!     ftlog::builder().root(dest).build().unwrap().init().unwrap();
+//! // minimal configuration with default setting
+//! // define root appender, pass None would write to stderr
+//! let dest = FileAppender::new("./current.log");
+//! ftlog::builder().root(dest).build().unwrap().init().unwrap();
 //!
-//!     trace!("Hello world!");
-//!     debug!("Hello world!");
-//!     info!("Hello world!");
-//!     warn!("Hello world!");
-//!     error!("Hello world!");
+//! trace!("Hello world!");
+//! debug!("Hello world!");
+//! info!("Hello world!");
+//! warn!("Hello world!");
+//! error!("Hello world!");
 //!
-//!     // when main thread is done, logging thread may be busy printing messages
-//!     // wait for log output to flush, otherwise messages in memory yet might lost
-//!     ftlog::logger().flush();
-//! }
+//! // when main thread is done, logging thread may be busy printing messages
+//! // wait for log output to flush, otherwise messages in memory yet might lost
+//! ftlog::logger().flush();
 //! ```
 //!
 //! A more complicated but feature rich usage:
 //!
 //! ```rust,no_run
-//! use ftlog::{appender::{Period, FileAppender}, LevelFilter, Record, FtLogFormat};
-//!
-//! // Custom formatter
-//! // A formatter defines how to build a message.
-//! // Since Formatting message into string can slow down the log macro call,
-//! // the idomatic way is to send required field as is to log thread, and build message in log thread.
-//! struct MyFormatter;
-//! impl FtLogFormat for MyFormatter {
-//!     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + std::fmt::Display> {
-//!         Box::new(Msg {
-//!             level: record.level(),
-//!             thread: std::thread::current().name().map(|n| n.to_string()),
-//!             file: record.file_static(),
-//!             line: record.line(),
-//!             args: format!("{}", record.args()),
-//!             module_path: record.module_path_static(),
-//!         })
-//!     }
-//! }
-//!
-//! // Store necessary field, define how to build into string with `Display` trait.
-//! struct Msg {
-//!     level: Level,
-//!     thread: Option<String>,
-//!     file: Option<&'static str>,
-//!     line: Option<u32>,
-//!     args: String,
-//!     module_path: Option<&'static str>,
-//! }
-//!
-//! impl Display for Msg {
-//!     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//!         f.write_str(&format!(
-//!             "{}@{}||{}:{}[{}] {}",
-//!             self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
-//!             self.module_path.unwrap_or(""),
-//!             self.file.unwrap_or(""),
-//!             self.line.unwrap_or(0),
-//!             self.level,
-//!             self.args
-//!         ))
-//!     }
-//! }
+//! use ftlog::{
+//!     appender::{Duration, FileAppender, Period},
+//!     FtLogFormat, LevelFilter, Record,
+//! };
 //!
 //! // configurate logger
 //! let logger = ftlog::builder()
-//!     // use custom fotmat
-//!     // datetime format is not configurable for performance
-//!     .format(StringFormatter)
 //!     // global max log level
 //!     .max_log_level(LevelFilter::Info)
+//!     // use bounded channel to avoid large memory comsumption when overwhelmed with logs
+//!     // Set `false` to tell ftlog to discard excessive logs.
+//!     // Set `true` to block log call to wait for log thread.
+//!     // here is the default settings
+//!     .bounded(100_000, false) // .unbounded()
 //!     // define root appender, pass None would write to stderr
 //!     .root(FileAppender::rotate_with_expire(
 //!         "./current.log",
 //!         Period::Minute,
 //!         Duration::seconds(30),
 //!     ))
-//!     // ---------- configure additional filter ----------
-//!     // write to "ftlog-appender" appender, with different level filter
+//!     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
 //!     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
-//!     // write to root appender, but with different level filter
-//!     .filter("ftlog", None, LevelFilter::Trace)
-//!     // write to "ftlog" appender, with default level filter
-//!     .filter("ftlog::appender::file", "ftlog", None)
-//!     // ----------  configure additional appender ----------
-//!     // new appender
 //!     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
-//!     // new appender, rotate to new file every Day
-//!     .appender("ftlog", FileAppender::rotate("ftlog.log", Period::Day))
 //!     .build()
 //!     .expect("logger build failed");
 //! // init global logger
 //! logger.init().expect("set logger failed");
 //! ```
 //!
-//! See `examples/complex.rs`.
+//! See `./examples` for more (e.g. custom format).
 //!
 //! ## Default Log Format
 //!
 //! Datetime format is fixed for performance.
 //!
-//! > 2022-04-08 19:20:48.190+08 **298ms** INFO main/src/ftlog.rs:14 My log
+//! > 2022-04-08 19:20:48.190+08 **298ms** INFO main@src/ftlog.rs:14 My log
 //! > message
 //!
 //! Here `298ms` denotes the latency between log macros call (e.g.
@@ -144,7 +97,7 @@
 //! A large delay indicates log thread might be blocked by excessive log
 //! messages.
 //!
-//! > 2022-04-10 21:27:15.996+08 0ms **2** INFO main/src/main.rs:29 limit
+//! > 2022-04-10 21:27:15.996+08 0ms **2** INFO main@src/main.rs:29 limit
 //! > running3 !
 //!
 //! The number **2** above shows how many log messages have been discarded.
@@ -166,15 +119,15 @@
 //!
 //! ```rust
 //! # use ftlog::info;
-//! info!(limit=3000; "limit running{} !", 3);
-//! info!(limit=1000; "limit running{} !", 1);
+//! info!(limit=3000; "limit running {}s !", 3);
 //! ```
-//! The minimal interval of the the above log call is 3000ms.
+//! The minimal interval of the the specific log call above is 3000ms.
 //!
-//! ```plain
-//! 2022-04-10 21:27:15.996+08 0ms 2 INFO main/src/main.rs:29 limit running1 !
+//! ```markdown
+//! 2022-04-10 21:27:10.996+08 0ms 0 INFO main@src/main.rs:29 limit running 3s !
+//! 2022-04-10 21:27:15.996+08 0ms 2 INFO main@src/main.rs:29 limit running 3s !
 //! ```
-//! The number **2** above shows how many log messages have been discarded.
+//! The number **2** above shows how many log messages have been discarded since last log.
 //!
 //! ## Log rotation
 //! `ftlog` supports log rotation in local timezone. The available rotation
@@ -209,25 +162,16 @@
 //! $ ls
 //! # by minute
 //! current-20221026T1351.log
-//! current-20221026T1352.log
-//! current-20221026T1353.log
 //! # by hour
 //! current-20221026T13.log
-//! current-20221026T14.log
 //! # by day
 //! current-20221026.log
-//! current-20221027.log
 //! # by month
 //! current-202210.log
-//! current-202211.log
 //! # by year
 //! current-2022.log
-//! current-2023.log
-//!
 //! # omitting extension (e.g. "./log") will add datetime to the end of log filename
 //! log-20221026T1351
-//! log-20221026T1352
-//! log-20221026T1353
 //! ```
 //!
 //! ### Clean outdated logs
@@ -307,12 +251,80 @@ enum LoggerOutput {
     FlushError(std::io::Error),
 }
 
+/// Shared by ftlog formatter
+///
+/// To further reduce time spent on log macro calls, ftlog saves required data
+/// and later construct log string in log thread.
+///
+/// `FtLogFormat` defines how to turn an reference to record into a box object,
+/// which can be sent to log thread and later formatted into string.
+///
+/// Here is an example of custom formatter:
+///
+/// ```
+/// use std::fmt::Display;
+///
+/// use ftlog::FtLogFormat;
+/// use log::{Level, Record};
+///
+/// struct MyFormatter;
+/// impl FtLogFormat for MyFormatter {
+///     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display> {
+///         Box::new(Msg {
+///             level: record.level(),
+///             thread: std::thread::current().name().map(|n| n.to_string()),
+///             file: record.file_static(),
+///             line: record.line(),
+///             args: format!("{}", record.args()),
+///             module_path: record.module_path_static(),
+///         })
+///     }
+/// }
+/// // Store necessary field, define how to format into string with `Display` trait.
+/// struct Msg {
+///     level: Level,
+///     thread: Option<String>,
+///     file: Option<&'static str>,
+///     line: Option<u32>,
+///     args: String,
+///     module_path: Option<&'static str>,
+/// }
+///
+/// impl Display for Msg {
+///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+///         f.write_str(&format!(
+///             "{}@{}||{}:{}[{}] {}",
+///             self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
+///             self.module_path.unwrap_or(""),
+///             self.file.unwrap_or(""),
+///             self.line.unwrap_or(0),
+///             self.level,
+///             self.args
+///         ))
+///     }
+/// }
+/// ```
 pub trait FtLogFormat: Send + Sync {
+    /// turn an reference to record into a box object, which can be sent to log thread
+    /// and then formatted into string.
     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display>;
 }
+
 /// Default ftlog formatter
+///
+/// The default ftlog format is like:
+/// ```text
+/// INFO main@examples/ftlog.rs:27 Hello, world!
+/// ```
+///
+/// Since ftlog cannot customize timestamp, the corresponding part is omitted.
+/// The actual log output is like:
+/// ```text
+/// 2022-11-22 17:02:12.574+08 0ms INFO main@examples/ftlog.rs:27 Hello, world!
+/// ```
 pub struct FtLogFormatter;
 impl FtLogFormat for FtLogFormatter {
+    /// Return a box object that contains required data (e.g. thread name, line of code, etc.) for later formatting into string
     #[inline]
     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display> {
         Box::new(Message {
@@ -340,7 +352,7 @@ struct Message {
 impl Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "{} {}/{}:{} {}",
+            "{} {}@{}:{} {}",
             self.level,
             self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
             self.file.unwrap_or(""),
@@ -350,6 +362,7 @@ impl Display for Message {
     }
 }
 
+/// ftlog global logger
 pub struct Logger {
     format: Box<dyn FtLogFormat>,
     level: LevelFilter,
@@ -449,6 +462,38 @@ struct BoundedChannelOption {
     block: bool,
 }
 
+/// Ftlog builder
+///
+///
+/// ```
+/// # use ftlog::appender::{FileAppender, Duration, Period};
+/// # use log::LevelFilter;
+/// let logger = ftlog::Builder::new()
+///     // use our own format
+///     .format(ftlog::FtLogFormatter)
+///     // global max log level
+///     .max_log_level(LevelFilter::Info)
+///     // define root appender, pass None would write to stderr
+///     .root(FileAppender::rotate_with_expire(
+///         "./current.log",
+///         Period::Minute,
+///         Duration::seconds(30),
+///     ))
+///     // ---------- configure additional filter ----------
+///     // write to "ftlog-appender" appender, with different level filter
+///     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+///     // write to root appender, but with different level filter
+///     .filter("ftlog", None, LevelFilter::Trace)
+///     // write to "ftlog" appender, with default level filter
+///     .filter("ftlog::appender::file", "ftlog", None)
+///     // ----------  configure additional appender ----------
+///     // new appender
+///     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
+///     // new appender, rotate to new file every Day
+///     .appender("ftlog", FileAppender::rotate("ftlog.log", Period::Day))
+///     .build()
+///     .expect("logger build failed");
+/// ```
 pub struct Builder {
     format: Box<dyn FtLogFormat>,
     level: LevelFilter,
@@ -458,6 +503,7 @@ pub struct Builder {
     bounded_channel_option: Option<BoundedChannelOption>,
 }
 
+/// Handy function to get ftlog builder
 #[inline]
 pub fn builder() -> Builder {
     Builder::new()
@@ -471,6 +517,12 @@ struct Directive {
 
 impl Builder {
     #[inline]
+    /// Create a ftlog builder with default settings:
+    /// - log level: INFO
+    /// - default formatter: `FtLogFormatter`
+    /// - output to stderr
+    /// - bounded channel between worker thread and log thread, with a size limit of 100_000
+    /// - discard excessive log messages
     pub fn new() -> Builder {
         Builder {
             format: Box::new(FtLogFormatter),
@@ -485,12 +537,18 @@ impl Builder {
         }
     }
 
+    /// Set custom formatter
     #[inline]
     pub fn format<F: FtLogFormat + 'static>(mut self, format: F) -> Builder {
         self.format = Box::new(format);
         self
     }
 
+    /// bound channel between worker thread and log thread
+    ///
+    /// When `block_when_full` is true, it will block current thread where
+    /// log macro (e.g. `log::info`) is called until log thread is able to handle new message.
+    /// Otherwises, excessive log messages will be discarded.
     #[inline]
     pub fn bounded(mut self, size: usize, block_when_full: bool) -> Builder {
         self.bounded_channel_option = Some(BoundedChannelOption {
@@ -500,12 +558,22 @@ impl Builder {
         self
     }
 
+    /// set channel size to unbound
+    ///
+    /// **ATTENTION**: too much log message will lead to huge memory consumption,
+    /// as log messages are queued to be handled by log thread.
+    /// When log message exceed the current channel size, it will double the size by default,
+    /// Since channel expansion asks for memory allocation, log calls can be slow down.
     #[inline]
     pub fn unbounded(mut self) -> Builder {
         self.bounded_channel_option = None;
         self
     }
 
+    /// Add an additional appender with a name
+    ///
+    /// Combine with `Builder::filter()`, ftlog can output log in different module
+    /// path to different output target.
     #[inline]
     pub fn appender(
         mut self,
@@ -516,6 +584,12 @@ impl Builder {
         self
     }
 
+    /// Add a filter to redirect log to different output
+    /// target (e.g. stderr, stdout, different files).
+    ///
+    /// **ATTENTION**: level more verbose than `Builder::max_log_level` will be ignored.
+    /// Say we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
+    /// ftlog will still log up to INFO.
     #[inline]
     pub fn filter<A: Into<Option<&'static str>>, L: Into<Option<LevelFilter>>>(
         mut self,
@@ -536,17 +610,25 @@ impl Builder {
     }
 
     #[inline]
+    /// Configure the default log output target
     pub fn root(mut self, writer: impl Write + Send + 'static) -> Builder {
         self.root = Some(Box::new(writer));
         self
     }
 
     #[inline]
+    /// Set max log level
+    ///
+    /// Logs with level more verbose than this will not be sent to log thread.
     pub fn max_log_level(mut self, level: LevelFilter) -> Builder {
         self.level = level;
         self
     }
 
+    /// Finish building ftlog logger
+    ///
+    /// The call spawns a log thread to formatting log message into string,
+    /// and write to output target.
     pub fn build(self) -> Result<Logger, IoError> {
         let mut filters = self.filters;
         // sort filters' paths to ensure match for longest path

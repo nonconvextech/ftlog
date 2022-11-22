@@ -114,13 +114,13 @@ Output:
 
 
 Default style example:
-2022-04-11 15:08:19.847+08 0ms INFO main/src/main.rs:25 Hello, world!
-2022-04-11 15:08:19.847+08 0ms INFO main/src/main.rs:28 running 0!
-2022-04-11 15:08:19.847+08 0ms 0 INFO main/src/main.rs:29 limit running0 !
-2022-04-11 15:08:20.849+08 0ms INFO main/src/main.rs:28 running 1!
-2022-04-11 15:08:21.852+08 0ms INFO main/src/main.rs:28 running 2!
-2022-04-11 15:08:22.857+08 0ms INFO main/src/main.rs:28 running 3!
-2022-04-11 15:08:22.857+08 0ms 2 INFO main/src/main.rs:29 limit running3 !
-2022-04-11 15:08:23.862+08 0ms INFO main/src/main.rs:28 running 4!
-2022-04-11 15:08:24.864+08 0ms INFO main/src/main.rs:28 running 5!
+2022-04-11 15:08:19.847+08 0ms INFO main@src/main.rs:25 Hello, world!
+2022-04-11 15:08:19.847+08 0ms INFO main@src/main.rs:28 running 0!
+2022-04-11 15:08:19.847+08 0ms 0 INFO main@src/main.rs:29 limit running0 !
+2022-04-11 15:08:20.849+08 0ms INFO main@src/main.rs:28 running 1!
+2022-04-11 15:08:21.852+08 0ms INFO main@src/main.rs:28 running 2!
+2022-04-11 15:08:22.857+08 0ms INFO main@src/main.rs:28 running 3!
+2022-04-11 15:08:22.857+08 0ms 2 INFO main@src/main.rs:29 limit running3 !
+2022-04-11 15:08:23.862+08 0ms INFO main@src/main.rs:28 running 4!
+2022-04-11 15:08:24.864+08 0ms INFO main@src/main.rs:28 running 5!
  */
