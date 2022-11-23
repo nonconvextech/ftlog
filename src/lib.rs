@@ -34,9 +34,8 @@
 //! use log::{error, info, warn};
 //!
 //! // minimal configuration with default setting
-//! // define root appender, pass None would write to stderr
-//! let dest = FileAppender::new("./current.log");
-//! ftlog::builder().root(dest).build().unwrap().init().unwrap();
+//! // define root appender, pass any thing that is Write and Send
+//! ftlog::builder().root(std::io::stderr()).build().unwrap().init().unwrap();
 //!
 //! trace!("Hello world!");
 //! debug!("Hello world!");
@@ -68,7 +67,7 @@
 //!     // Set `true` to block log call to wait for log thread.
 //!     // here is the default settings
 //!     .bounded(100_000, false) // .unbounded()
-//!     // define root appender, pass None would write to stderr
+//!     // define root appender, pass anything that is Write and Send
 //!     .root(FileAppender::rotate_with_expire(
 //!         "./current.log",
 //!         Period::Minute,
@@ -498,7 +497,7 @@ struct BoundedChannelOption {
 ///     .format(ftlog::FtLogFormatter)
 ///     // global max log level
 ///     .max_log_level(LevelFilter::Info)
-///     // define root appender, pass None would write to stderr
+///     // define root appender, pass anything that is Write and Send
 ///     .root(FileAppender::rotate_with_expire(
 ///         "./current.log",
 ///         Period::Minute,
