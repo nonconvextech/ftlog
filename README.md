@@ -35,8 +35,7 @@ use ftlog::{debug, trace};
 use log::{error, info, warn};
 
 // minimal configuration with default setting
-// define root appender, pass any thing that is Write and Send
-ftlog::builder().root(std::io::stderr()).build().unwrap().init().unwrap();
+ftlog::builder().build().unwrap().init().unwrap();
 
 trace!("Hello world!");
 debug!("Hello world!");
@@ -69,11 +68,14 @@ let logger = ftlog::builder()
     // here is the default settings
     .bounded(100_000, false) // .unbounded()
     // define root appender, pass anything that is Write and Send
+    // omit `Builder::root` will write to stderr
     .root(FileAppender::rotate_with_expire(
         "./current.log",
         Period::Minute,
         Duration::seconds(30),
     ))
+    // level filter for root appender
+    .root_log_level(LevelFilter::Warn)
     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
