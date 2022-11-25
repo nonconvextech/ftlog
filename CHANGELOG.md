@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.1](https://github.com/nonconvextech/ftlog/compare/v0.2.0...v0.2.1) (2022-11-25)
+
+
+### Features
+
+* add level filter for root appender ([635e5a5](https://github.com/nonconvextech/ftlog/commit/635e5a50e0b4b4667387a7698fdbe841ce7f09b3))
+
 ## [0.2.0](https://github.com/nonconvextech/ftlog/compare/v0.1.1...v0.2.0) (2022-11-22)
 
 
