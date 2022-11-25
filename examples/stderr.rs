@@ -1,9 +1,7 @@
-use std::io::stderr;
-
 use ftlog::info;
 
 fn main() {
-    let builder = ftlog::builder().root(stderr()).build().unwrap();
+    let builder = ftlog::builder().build().unwrap();
     builder.init().unwrap();
 
     info!("Hello, world!");
