@@ -34,8 +34,7 @@
 //! use log::{error, info, warn};
 //!
 //! // minimal configuration with default setting
-//! // define root appender, pass any thing that is Write and Send
-//! ftlog::builder().root(std::io::stderr()).build().unwrap().init().unwrap();
+//! ftlog::builder().build().unwrap().init().unwrap();
 //!
 //! trace!("Hello world!");
 //! debug!("Hello world!");
@@ -68,11 +67,14 @@
 //!     // here is the default settings
 //!     .bounded(100_000, false) // .unbounded()
 //!     // define root appender, pass anything that is Write and Send
+//!     // omit `Builder::root` will write to stderr
 //!     .root(FileAppender::rotate_with_expire(
 //!         "./current.log",
 //!         Period::Minute,
 //!         Duration::seconds(30),
 //!     ))
+//!     // level filter for root appender
+//!     .root_log_level(LevelFilter::Warn)
 //!     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
 //!     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
 //!     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
@@ -492,12 +494,13 @@ struct BoundedChannelOption {
 /// ```
 /// # use ftlog::appender::{FileAppender, Duration, Period};
 /// # use log::LevelFilter;
-/// let logger = ftlog::Builder::new()
+/// let logger = ftlog::builder()
 ///     // use our own format
 ///     .format(ftlog::FtLogFormatter)
 ///     // global max log level
 ///     .max_log_level(LevelFilter::Info)
 ///     // define root appender, pass anything that is Write and Send
+///     // omit `Builder::root` to write to stderr
 ///     .root(FileAppender::rotate_with_expire(
 ///         "./current.log",
 ///         Period::Minute,
@@ -521,6 +524,7 @@ struct BoundedChannelOption {
 pub struct Builder {
     format: Box<dyn FtLogFormat>,
     level: LevelFilter,
+    root_level: LevelFilter,
     root: Option<Box<dyn Write + Send>>,
     appenders: HashMap<&'static str, Box<dyn Write + Send + 'static>>,
     filters: Vec<Directive>,
@@ -542,7 +546,8 @@ struct Directive {
 impl Builder {
     #[inline]
     /// Create a ftlog builder with default settings:
-    /// - log level: INFO
+    /// - global log level: INFO
+    /// - root log level: INFO
     /// - default formatter: `FtLogFormatter`
     /// - output to stderr
     /// - bounded channel between worker thread and log thread, with a size limit of 100_000
@@ -559,6 +564,7 @@ impl Builder {
                 block: false,
                 print: false,
             }),
+            root_level: LevelFilter::Info,
         }
     }
 
@@ -649,7 +655,9 @@ impl Builder {
     }
 
     #[inline]
-    /// Configure the default log output target
+    /// Configure the default log output target.
+    ///
+    /// Omit this method will output to stderr.
     pub fn root(mut self, writer: impl Write + Send + 'static) -> Builder {
         self.root = Some(Box::new(writer));
         self
@@ -661,6 +669,15 @@ impl Builder {
     /// Logs with level more verbose than this will not be sent to log thread.
     pub fn max_log_level(mut self, level: LevelFilter) -> Builder {
         self.level = level;
+        self
+    }
+
+    #[inline]
+    /// Set max log level
+    ///
+    /// Logs with level more verbose than this will not be sent to log thread.
+    pub fn root_log_level(mut self, level: LevelFilter) -> Builder {
+        self.root_level = level;
         self
     }
 
@@ -690,6 +707,7 @@ impl Builder {
             .spawn(move || {
                 let mut appenders = self.appenders;
                 let filters = filters;
+                let root_level = self.root_level;
 
                 for filter in &filters {
                     if let Some(level) = filter.level {
@@ -733,6 +751,9 @@ impl Builder {
                                     .map(|n| appenders.get_mut(n).unwrap())
                                     .unwrap_or(&mut root)
                             } else {
+                                if root_level < level {
+                                    continue;
+                                }
                                 &mut root
                             };
 
