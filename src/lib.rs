@@ -728,7 +728,7 @@ impl Builder {
                 let mut missed_log = FxHashMap::default();
                 let mut last_flush = Instant::now();
                 loop {
-                    match receiver.try_recv() {
+                    match receiver.recv_timeout(Duration::from_millis(200)) {
                         Ok(LoggerInput::LogMsg(LogMsg {
                             tm,
                             msg,
@@ -823,26 +823,25 @@ impl Builder {
                         Ok(LoggerInput::Quit) => {
                             break;
                         }
-                        Err(TryRecvError::Empty) => {
-                            std::thread::sleep(Duration::from_micros(200));
+                        Err(RecvTimeoutError::Timeout) => {
+                            if last_flush.elapsed() > Duration::from_millis(1000) {
+                                let flush_errors = appenders
+                                    .values_mut()
+                                    .chain([&mut root])
+                                    .filter_map(|w| w.flush().err());
+                                for err in flush_errors {
+                                    log::warn!("Ftlog flush error: {}", err);
+                                }
+                                last_flush = Instant::now();
+                            };
                         }
                         Err(e) => {
-                            panic!(
+                            eprintln!(
                                 "sender closed without sending a Quit first, this is a bug, {}",
                                 e
                             );
                         }
                     }
-                    if last_flush.elapsed() > Duration::from_millis(1000) {
-                        let flush_errors = appenders
-                            .values_mut()
-                            .chain([&mut root])
-                            .filter_map(|w| w.flush().err());
-                        for err in flush_errors {
-                            log::warn!("Ftlog flush error: {}", err);
-                        }
-                        last_flush = Instant::now();
-                    };
                 }
             })?;
         let block = self
