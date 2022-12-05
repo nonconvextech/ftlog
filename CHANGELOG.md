@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.2](https://github.com/nonconvextech/ftlog/compare/v0.2.1...v0.2.2) (2022-12-05)
+
+
+### Features
+
+* avoid panic in main/worker thread ([1365e06](https://github.com/nonconvextech/ftlog/commit/1365e06a93e5b681c5fbbbc6a13b3f57bcbaf27c))
+* avoid periodically check for flush ([460b843](https://github.com/nonconvextech/ftlog/commit/460b8433dd4a3342ee3fadd77ef012857c0595a2))
+
 ### [0.2.1](https://github.com/nonconvextech/ftlog/compare/v0.2.0...v0.2.1) (2022-11-25)
 
 
