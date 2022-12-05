@@ -18,6 +18,7 @@ exclude = [ ".standard-version", ".versionrc", ".github" ]
 time = "0.1"
 crossbeam-channel = "0.5.0"
 fxhash = "0.2.1"
+arc-swap = "1"
 
   [dependencies.log]
   version = "0.4"

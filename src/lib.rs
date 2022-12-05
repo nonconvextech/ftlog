@@ -214,6 +214,7 @@
 //! | `env_logger` <br/> output to file with `BufWriter`| static string | 279 ns/iter (±43)     | 550 ns/iter (±96)     |
 //! | `env_logger` <br/> output to file with `BufWriter`| with i32      | 278 ns/iter (±53)     | 565 ns/iter (±95)     |
 
+use arc_swap::ArcSwap;
 pub use log::{
     debug, error, info, log, log_enabled, logger, trace, warn, Level, LevelFilter, Record,
 };
@@ -222,10 +223,11 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::{stderr, Error as IoError, Write};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender, TryRecvError, TrySendError};
+use crossbeam_channel::{bounded, unbounded, Receiver, RecvTimeoutError, Sender, TrySendError};
 use fxhash::FxHashMap;
 use log::kv::Key;
 use log::{set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
@@ -366,8 +368,8 @@ impl Display for Message {
 }
 
 struct DiscardState {
-    last: Instant,
-    count: usize,
+    last: ArcSwap<Instant>,
+    count: AtomicUsize,
 }
 
 /// ftlog global logger
@@ -378,7 +380,8 @@ pub struct Logger {
     notification: Receiver<LoggerOutput>,
     worker_thread: Option<std::thread::JoinHandle<()>>,
     block: bool,
-    discard_state: Option<Mutex<DiscardState>>,
+    discard_state: Option<DiscardState>,
+    stopped: AtomicBool,
 }
 
 impl Logger {
@@ -427,30 +430,30 @@ impl Log for Logger {
             limit_key,
         });
         if self.block {
-            self.queue
-                .send(msg)
-                .expect("logger queue closed when logging, this is a bug")
+            if let Err(_) = self.queue.send(msg) {
+                let stop = self.stopped.load(Ordering::SeqCst);
+                if !stop {
+                    eprintln!("logger queue closed when logging, this is a bug");
+                    self.stopped.store(true, Ordering::SeqCst)
+                }
+            }
         } else {
             match self.queue.try_send(msg) {
                 Err(TrySendError::Full(_)) => {
-                    if self.discard_state.is_some() {
-                        let count = {
-                            let mut lock = self.discard_state.as_ref().unwrap().lock().unwrap();
-                            lock.count += 1;
-                            if lock.last.elapsed().as_secs() >= 5 {
-                                lock.last = Instant::now();
-                                Some(lock.count)
-                            } else {
-                                None
-                            }
-                        };
-                        if let Some(c) = count {
-                            eprintln!("Excessive log messages. Log omitted: {}", c);
+                    if let Some(s) = &self.discard_state {
+                        let count = s.count.fetch_add(1, Ordering::SeqCst);
+                        if s.last.load().elapsed().as_secs() >= 5 {
+                            eprintln!("Excessive log messages. Log omitted: {}", count);
+                            s.last.store(Arc::new(Instant::now()));
                         }
                     }
                 }
                 Err(TrySendError::Disconnected(_)) => {
-                    panic!("logger queue closed when logging, this is a bug")
+                    let stop = self.stopped.load(Ordering::SeqCst);
+                    if !stop {
+                        eprintln!("logger queue closed when logging, this is a bug");
+                        self.stopped.store(true, Ordering::SeqCst)
+                    }
                 }
                 _ => (),
             }
@@ -748,7 +751,7 @@ impl Builder {
                                 }
                                 filter
                                     .appender
-                                    .map(|n| appenders.get_mut(n).unwrap())
+                                    .and_then(|n| appenders.get_mut(n))
                                     .unwrap_or(&mut root)
                             } else {
                                 if root_level < level {
@@ -864,11 +867,12 @@ impl Builder {
             discard_state: if block || !print {
                 None
             } else {
-                Some(Mutex::new(DiscardState {
-                    last: Instant::now(),
-                    count: 0,
-                }))
+                Some(DiscardState {
+                    last: ArcSwap::new(Arc::new(Instant::now())),
+                    count: AtomicUsize::new(0),
+                })
             },
+            stopped: AtomicBool::new(false),
         })
     }
 }
