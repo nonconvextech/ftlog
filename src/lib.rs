@@ -90,7 +90,7 @@
 //!
 //! The datetime format is fixed for performance reasons.
 //!
-//! > 2022-04-08 19:20:48.190+08 **298ms** INFO main@src/ftlog.rs:14 My log
+//! > 2022-04-08 19:20:48.190+08 **298ms** INFO main [src/ftlog.rs:14] My log
 //! > message
 //!
 //! Here `298ms` denotes the latency between the call of the log (e.g.
@@ -99,7 +99,7 @@
 //! A large delay indicates that the log thread may be blocked by excessive log
 //! messages.
 //!
-//! > 2022-04-10 21:27:15.996+08 0ms **2** INFO main@src/main.rs:29 limit
+//! > 2022-04-10 21:27:15.996+08 0ms **2** INFO main [src/main.rs:29] limit
 //! > running3 !
 //!
 //! The number **2** above indicates how many log messages were discarded.
@@ -126,8 +126,8 @@
 //! The minimal interval of the the specific log call above is 3000ms.
 //!
 //! ```markdown
-//! 2022-04-10 21:27:10.996+08 0ms 0 INFO main@src/main.rs:29 limit running 3s !
-//! 2022-04-10 21:27:15.996+08 0ms 2 INFO main@src/main.rs:29 limit running 3s !
+//! 2022-04-10 21:27:10.996+08 0ms 0 INFO main [src/main.rs:29] limit running 3s !
+//! 2022-04-10 21:27:15.996+08 0ms 2 INFO main [src/main.rs:29] limit running 3s !
 //! ```
 //! The number **2** above shows how many log messages is discarded since last log.
 //!
@@ -319,13 +319,13 @@ pub trait FtLogFormat: Send + Sync {
 ///
 /// The default ftlog format is like:
 /// ```text
-/// INFO main@examples/ftlog.rs:27 Hello, world!
+/// INFO main [examples/ftlog.rs:27] Hello, world!
 /// ```
 ///
 /// Since ftlog cannot customize timestamp, the corresponding part is omitted.
 /// The actual log output is like:
 /// ```text
-/// 2022-11-22 17:02:12.574+08 0ms INFO main@examples/ftlog.rs:27 Hello, world!
+/// 2022-11-22 17:02:12.574+08 0ms INFO main [examples/ftlog.rs:27] Hello, world!
 /// ```
 pub struct FtLogFormatter;
 impl FtLogFormat for FtLogFormatter {
@@ -335,7 +335,11 @@ impl FtLogFormat for FtLogFormatter {
         Box::new(Message {
             level: record.level(),
             thread: std::thread::current().name().map(|n| n.to_string()),
-            file: record.file_static(),
+            file: record
+                .file_static()
+                .map(|s| Cow::Borrowed(s))
+                .or_else(|| record.file().map(|s| Cow::Owned(s.to_owned())))
+                .unwrap_or(Cow::Borrowed("")),
             line: record.line(),
             args: record
                 .args()
@@ -349,7 +353,7 @@ impl FtLogFormat for FtLogFormatter {
 struct Message {
     level: Level,
     thread: Option<String>,
-    file: Option<&'static str>,
+    file: Cow<'static, str>,
     line: Option<u32>,
     args: Cow<'static, str>,
 }
@@ -357,10 +361,10 @@ struct Message {
 impl Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "{} {}@{}:{} {}",
+            "{} {} [{}:{}] {}",
             self.level,
             self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
-            self.file.unwrap_or(""),
+            self.file,
             self.line.unwrap_or(0),
             self.args
         ))

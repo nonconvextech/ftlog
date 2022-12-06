@@ -91,7 +91,7 @@ See `./examples` for more (e.g. custom format).
 
 The datetime format is fixed for performance reasons.
 
-> 2022-04-08 19:20:48.190+08 **298ms** INFO main@src/ftlog.rs:14 My log
+> 2022-04-08 19:20:48.190+08 **298ms** INFO main [src/ftlog.rs:14] My log
 > message
 
 Here `298ms` denotes the latency between the call of the log (e.g.
@@ -100,7 +100,7 @@ Here `298ms` denotes the latency between the call of the log (e.g.
 A large delay indicates that the log thread may be blocked by excessive log
 messages.
 
-> 2022-04-10 21:27:15.996+08 0ms **2** INFO main@src/main.rs:29 limit
+> 2022-04-10 21:27:15.996+08 0ms **2** INFO main [src/main.rs:29] limit
 > running3 !
 
 The number **2** above indicates how many log messages were discarded.
@@ -126,8 +126,8 @@ info!(limit=3000; "limit running {}s !", 3);
 The minimal interval of the the specific log call above is 3000ms.
 
 ```markdown
-2022-04-10 21:27:10.996+08 0ms 0 INFO main@src/main.rs:29 limit running 3s !
-2022-04-10 21:27:15.996+08 0ms 2 INFO main@src/main.rs:29 limit running 3s !
+2022-04-10 21:27:10.996+08 0ms 0 INFO main [src/main.rs:29] limit running 3s !
+2022-04-10 21:27:15.996+08 0ms 2 INFO main [src/main.rs:29] limit running 3s !
 ```
 The number **2** above shows how many log messages is discarded since last log.
 

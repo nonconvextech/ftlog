@@ -80,13 +80,13 @@ logger.init().expect("set logger failed");
 ### 日志格式
 
 ```plain
-2022-04-08 19:20:48.190+08 298ms <<这里是日志的延时，正常这个数为0，如果太大说明channel堵塞了 INFO main@src/ftlog.rs:14 14575
+2022-04-08 19:20:48.190+08 298ms <<这里是日志的延时，正常这个数为0，如果太大说明channel堵塞了 INFO main [src/ftlog.rs:14] 14575
 ```
 
 其中 `298ms` 表示调用日志打印到日志专属线程开始处理日志消息之间的延迟，正常应为0ms。
 
 ```plain
-2022-04-10 21:27:15.996+08 0ms 2 <<这表示丢弃了2条日志，说明使用了limit语法 INFO main@src/main.rs:29 limit running3 !
+2022-04-10 21:27:15.996+08 0ms 2 <<这表示丢弃了2条日志，说明使用了limit语法 INFO main [src/main.rs:29] limit running3 !
 ```
 
 ### 带间隔的日志
@@ -103,8 +103,8 @@ info!(limit=3000; "limit running{} !", 1);
 ```
 
 ```markdown
-2022-04-10 21:27:10.996+08 0ms 0 INFO main@src/main.rs:29 limit running 3s !
-2022-04-10 21:27:15.996+08 0ms 2 INFO main@src/main.rs:29 limit running 3s !
+2022-04-10 21:27:10.996+08 0ms 0 INFO main [src/main.rs:29] limit running 3s !
+2022-04-10 21:27:15.996+08 0ms 2 INFO main [src/main.rs:29] limit running 3s !
 ```
 上面的数字2表示，在两条日志中间，还有2条被丢弃的日志。
 
