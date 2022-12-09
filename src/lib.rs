@@ -530,8 +530,8 @@ struct BoundedChannelOption {
 /// ```
 pub struct Builder {
     format: Box<dyn FtLogFormat>,
-    level: LevelFilter,
-    root_level: LevelFilter,
+    level: Option<LevelFilter>,
+    root_level: Option<LevelFilter>,
     root: Option<Box<dyn Write + Send>>,
     appenders: HashMap<&'static str, Box<dyn Write + Send + 'static>>,
     filters: Vec<Directive>,
@@ -562,7 +562,8 @@ impl Builder {
     pub fn new() -> Builder {
         Builder {
             format: Box::new(FtLogFormatter),
-            level: LevelFilter::Info,
+            level: None,
+            root_level: None,
             root: None,
             appenders: HashMap::new(),
             filters: Vec::new(),
@@ -571,7 +572,6 @@ impl Builder {
                 block: false,
                 print: false,
             }),
-            root_level: LevelFilter::Info,
         }
     }
 
@@ -675,7 +675,7 @@ impl Builder {
     ///
     /// Logs with level more verbose than this will not be sent to log thread.
     pub fn max_log_level(mut self, level: LevelFilter) -> Builder {
-        self.level = level;
+        self.level = Some(level);
         self
     }
 
@@ -684,7 +684,7 @@ impl Builder {
     ///
     /// Logs with level more verbose than this will not be sent to log thread.
     pub fn root_log_level(mut self, level: LevelFilter) -> Builder {
-        self.root_level = level;
+        self.root_level = Some(level);
         self
     }
 
@@ -703,6 +703,14 @@ impl Builder {
                 panic!("Appender {} not configured", appender_name);
             }
         }
+        let global_level = self.level.unwrap_or(LevelFilter::Info);
+        let root_level = self.root_level.unwrap_or(global_level);
+        if global_level < root_level {
+            warn!(
+                "Logs with level more verbose than {} will be ignored",
+                global_level,
+            );
+        }
 
         let (sync_sender, receiver) = match &self.bounded_channel_option {
             None => unbounded(),
@@ -714,14 +722,13 @@ impl Builder {
             .spawn(move || {
                 let mut appenders = self.appenders;
                 let filters = filters;
-                let root_level = self.root_level;
 
                 for filter in &filters {
                     if let Some(level) = filter.level {
-                        if self.level < level {
+                        if global_level < level {
                             warn!(
                                 "Logs with level more verbose than {} will be ignored in `{}` ",
-                                self.level, filter.path,
+                                global_level, filter.path,
                             );
                         }
                     }
@@ -863,7 +870,7 @@ impl Builder {
             .unwrap_or(false);
         Ok(Logger {
             format: self.format,
-            level: self.level,
+            level: global_level,
             queue: sync_sender,
             notification: notification_receiver,
             worker_thread: Some(worker_thread),
