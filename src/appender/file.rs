@@ -21,6 +21,7 @@
 //!
 //! ```rust
 //! # use ftlog::appender::{FileAppender, Period};
+//! // rotate every minute
 //! let appender = FileAppender::rotate("./mylog.log", Period::Minute);
 //! ```
 //!
@@ -58,6 +59,8 @@
 //! // clean files named like `current-\d{8}T\d{4}.log`.
 //! // files like `another-\d{8}T\d{4}.log` or `current-\d{8}T\d{4}` will not be deleted, since the filenames' stem do not match.
 //! // files like `current-\d{8}.log` will remains either, since the rotation durations do not match.
+//!
+//! // Rotate every minute, clean stale logs that were modified 180s ago on each rotation
 //! let appender = FileAppender::rotate_with_expire("./current.log", Period::Minute, Duration::seconds(180));
 //! ```
 use std::{
@@ -106,7 +109,7 @@ impl FileAppender {
                     .create(true)
                     .append(true)
                     .open(p)
-                    .unwrap(),
+                    .expect(&format!("Fail to create log file: {}", p.to_string_lossy())),
             ),
             path: p.to_path_buf(),
             rotate: None,
@@ -190,8 +193,9 @@ impl FileAppender {
         }
     }
 
-    /// Create a file appender with rotate, auto delete logs that last modified
-    /// before given expire duration
+    /// Create a file appender that rotate a new file every given period,
+    /// auto delete logs that last modified
+    /// before expire duration given by `keep` parameter.
     pub fn rotate_with_expire<T: AsRef<Path>>(path: T, period: Period, keep: Duration) -> Self {
         let p = path.as_ref();
         let (start, wait) = Self::until(period);
