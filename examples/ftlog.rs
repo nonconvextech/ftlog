@@ -5,15 +5,13 @@ use ftlog::{
 use log::LevelFilter;
 use time::Duration;
 fn init() {
+    // Rotate every day, clean stale logs that were modified 7 days ago on each rotation
+    let writer = FileAppender::rotate_with_expire("./current.log", Period::Day, Duration::weeks(1));
     let logger = ftlog::Builder::new()
         // global max log level
         .max_log_level(LevelFilter::Info)
         // define root appender, pass None would write to stderr
-        .root(FileAppender::rotate_with_expire(
-            "./current.log",
-            Period::Minute,
-            Duration::seconds(30),
-        ))
+        .root(writer)
         // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
         .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
         .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))

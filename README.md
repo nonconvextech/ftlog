@@ -194,8 +194,8 @@ use ftlog::{appender::{Period, FileAppender, Duration}};
 // files like `another-\d{8}T\d{4}.log` or `current-\d{8}T\d{4}` will not be deleted, since the filenames' stem do not match.
 // files like `current-\d{8}.log` will remains either, since the rotation durations do not match.
 
-// Rotate every minute, clean stale logs that were modified 180s ago on each rotation
-let appender = FileAppender::rotate_with_expire("./current.log", Period::Minute, Duration::seconds(180));
+// Rotate every day, clean stale logs that were modified 7 days ago on each rotation
+let appender = FileAppender::rotate_with_expire("./current.log", Period::Day, Duration::days(7));
 let logger = ftlog::builder()
     .root(appender)
     .build()
