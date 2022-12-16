@@ -14,7 +14,7 @@ pub fn setup() -> () {
         .filter("expire", "expire", None)
         .appender(
             "expire",
-            FileAppender::rotate_with_expire("expire.log", Period::Minute, Duration::seconds(30)),
+            FileAppender::rotate_with_expire("expire.log", Period::Day, Duration::days(7)),
         )
         .build()
         .expect("logger build failed");

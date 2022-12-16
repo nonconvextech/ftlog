@@ -63,8 +63,8 @@ let logger = ftlog::builder()
     // 配置默认输出位置，传入None则输出到stderr
     .root(FileAppender::rotate_with_expire(
         "./current.log",
-        Period::Minute,
-        Duration::seconds(30),
+        Period::Day,
+        Duration::days(7),
     ))
     // 将 ftlog::appender 下的日志输出到后面定义的"ftlog-appender"，即"ftlog-appender.log"文件
     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
@@ -163,7 +163,8 @@ use ftlog::{appender::{Period, FileAppender, Duration}};
 // 这个例子中，文件名满足current-\d{8}T\d{4}.log的文件将被清理
 // `another-\d{8}T\d{4}.log`, `current-\d{8}T\d{4}` 等等由于文件名不匹配不会被清理
 // `current-\d{8}.log` 由于分割时间精度不同也不会被清理
-let appender = FileAppender::rotate_with_expire("./current.log", Period::Minute, Duration::seconds(180));
+// 按天分割，日志最多保留7天。
+let appender = FileAppender::rotate_with_expire("./current.log", Period::Day, Duration::days(7));
 let logger = ftlog::builder()
     .root(appender)
     .build()

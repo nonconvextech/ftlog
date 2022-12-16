@@ -71,8 +71,8 @@ let logger = ftlog::builder()
     // omit `Builder::root` will write to stderr
     .root(FileAppender::rotate_with_expire(
         "./current.log",
-        Period::Minute,
-        Duration::seconds(30),
+        Period::Day,
+        Duration::days(7),
     ))
     // level filter for root appender
     .root_log_level(LevelFilter::Warn)

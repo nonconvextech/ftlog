@@ -70,8 +70,8 @@
 //!     // omit `Builder::root` will write to stderr
 //!     .root(FileAppender::rotate_with_expire(
 //!         "./current.log",
-//!         Period::Minute,
-//!         Duration::seconds(30),
+//!         Period::Day,
+//!         Duration::days(7),
 //!     ))
 //!     // level filter for root appender
 //!     .root_log_level(LevelFilter::Warn)
@@ -244,6 +244,89 @@ struct LogMsg {
     target: String,
     limit: u32,
     limit_key: u64,
+}
+impl LogMsg {
+    fn write(
+        self,
+        filters: &Vec<Directive>,
+        appenders: &mut HashMap<&'static str, Box<dyn Write + Send>>,
+        root: &mut Box<dyn Write + Send>,
+        root_level: LevelFilter,
+        missed_log: &mut FxHashMap<u64, i64>,
+        last_log: &mut FxHashMap<u64, i64>,
+    ) {
+        let now = get_time();
+        let now_nanos = now.sec * 1000_000_000 + now.nsec as i64;
+
+        let writer = if let Some(filter) = filters.iter().find(|x| self.target.starts_with(x.path))
+        {
+            if filter.level.map(|l| l < self.level).unwrap_or(false) {
+                return;
+            }
+            filter
+                .appender
+                .and_then(|n| appenders.get_mut(n))
+                .unwrap_or(root)
+        } else {
+            if root_level < self.level {
+                return;
+            }
+            root
+        };
+
+        if self.limit > 0 {
+            let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0_i64);
+            if let Some(last_nanos) = last_log.get(&self.limit_key) {
+                if now_nanos - last_nanos < self.limit as i64 * 1_000_000 {
+                    *missed_entry += 1;
+                    return;
+                }
+            }
+            last_log.insert(self.limit_key, now_nanos);
+            let delay =
+                (now_nanos - (self.tm.sec * 1000_000_000 + self.tm.nsec as i64)) / 1_000_000;
+            let tm = time::at(self.tm);
+            let tm_millisec = tm.tm_nsec / 1_000_000;
+
+            writeln!(
+                writer,
+                "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {} {}",
+                tm.tm_year + 1900,
+                tm.tm_mon + 1,
+                tm.tm_mday,
+                tm.tm_hour,
+                tm.tm_min,
+                tm.tm_sec,
+                tm_millisec,
+                tm.tm_utcoff / 3600,
+                delay,
+                *missed_entry,
+                self.msg
+            )
+            .expect("logger write message failed");
+            *missed_entry = 0;
+        } else {
+            let delay =
+                (now_nanos - (self.tm.sec * 1000_000_000 + self.tm.nsec as i64)) / 1_000_000;
+            let tm = time::at(self.tm);
+            let tm_millisec = tm.tm_nsec / 1_000_000;
+            writeln!(
+                writer,
+                "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {}",
+                tm.tm_year + 1900,
+                tm.tm_mon + 1,
+                tm.tm_mday,
+                tm.tm_hour,
+                tm.tm_min,
+                tm.tm_sec,
+                tm_millisec,
+                tm.tm_utcoff / 3600,
+                delay,
+                self.msg
+            )
+            .expect("logger write message failed");
+        }
+    }
 }
 
 enum LoggerInput {
@@ -512,8 +595,8 @@ struct BoundedChannelOption {
 ///     // omit `Builder::root` to write to stderr
 ///     .root(FileAppender::rotate_with_expire(
 ///         "./current.log",
-///         Period::Minute,
-///         Duration::seconds(30),
+///         Period::Day,
+///         Duration::days(7),
 ///     ))
 ///     // ---------- configure additional filter ----------
 ///     // write to "ftlog-appender" appender, with different level filter
@@ -745,83 +828,39 @@ impl Builder {
                 let mut last_flush = Instant::now();
                 loop {
                     match receiver.recv_timeout(Duration::from_millis(200)) {
-                        Ok(LoggerInput::LogMsg(LogMsg {
-                            tm,
-                            msg,
-                            limit,
-                            limit_key,
-                            target,
-                            level,
-                        })) => {
-                            let now = get_time();
-                            let now_nanos = now.sec * 1000_000_000 + now.nsec as i64;
-
-                            let writer = if let Some(filter) =
-                                filters.iter().find(|x| target.starts_with(x.path))
-                            {
-                                if filter.level.map(|l| l < level).unwrap_or(false) {
-                                    continue;
-                                }
-                                filter
-                                    .appender
-                                    .and_then(|n| appenders.get_mut(n))
-                                    .unwrap_or(&mut root)
-                            } else {
-                                if root_level < level {
-                                    continue;
-                                }
-                                &mut root
-                            };
-
-                            if limit > 0 {
-                                let missed_entry =
-                                    missed_log.entry(limit_key).or_insert_with(|| 0_i64);
-                                if let Some(last_nanos) = last_log.get(&limit_key) {
-                                    if now_nanos - last_nanos < limit as i64 * 1_000_000 {
-                                        *missed_entry += 1;
-                                        continue;
-                                    }
-                                }
-                                last_log.insert(limit_key, now_nanos);
-                                let delay = (now_nanos - (tm.sec * 1000_000_000 + tm.nsec as i64))
-                                    / 1_000_000;
-                                let tm = time::at(tm);
-                                let tm_millisec = tm.tm_nsec / 1_000_000;
-
-                                writeln!(writer, "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {} {}",
-                                         tm.tm_year + 1900,
-                                         tm.tm_mon + 1,
-                                         tm.tm_mday,
-                                         tm.tm_hour,
-                                         tm.tm_min,
-                                         tm.tm_sec,
-                                         tm_millisec,
-                                         tm.tm_utcoff / 3600,
-                                         delay,
-                                         *missed_entry,
-                                         msg
-                                        ).expect("logger write message failed");
-                                *missed_entry = 0;
-                            } else {
-                                let delay = (now_nanos - (tm.sec * 1000_000_000 + tm.nsec as i64))
-                                    / 1_000_000;
-                                let tm = time::at(tm);
-                                let tm_millisec = tm.tm_nsec / 1_000_000;
-                                writeln!(writer, "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {}",
-                                         tm.tm_year + 1900,
-                                         tm.tm_mon + 1,
-                                         tm.tm_mday,
-                                         tm.tm_hour,
-                                         tm.tm_min,
-                                         tm.tm_sec,
-                                         tm_millisec,
-                                         tm.tm_utcoff / 3600,
-                                         delay,
-                                         msg
-                                        ).expect("logger write message failed");
-                            }
+                        Ok(LoggerInput::LogMsg(log_msg)) => {
+                            log_msg.write(
+                                &filters,
+                                &mut appenders,
+                                &mut root,
+                                root_level,
+                                &mut missed_log,
+                                &mut last_log,
+                            );
                         }
                         Ok(LoggerInput::Flush) => {
+                            let max = receiver.len();
+                            receiver
+                                .recv()
+                                .into_iter()
+                                .take(max)
+                                .filter_map(|f| {
+                                    if let LoggerInput::LogMsg(msg) = f {
+                                        Some(msg)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .for_each(|l| {
+                                    l.write(
+                                        &filters,
+                                        &mut appenders,
+                                        &mut root,
+                                        root_level,
+                                        &mut missed_log,
+                                        &mut last_log,
+                                    )
+                                });
                             let flush_result = appenders
                                 .values_mut()
                                 .chain([&mut root])

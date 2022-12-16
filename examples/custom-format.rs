@@ -59,8 +59,8 @@ fn init() {
         // define root appender, pass None would write to stderr
         .root(FileAppender::rotate_with_expire(
             "./current.log",
-            Period::Minute,
-            Duration::seconds(30),
+            Period::Day,
+            Duration::days(7),
         ))
         // ---------- configure additional filter ----------
         // write to "ftlog-appender" appender, with different level filter
