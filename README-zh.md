@@ -15,7 +15,7 @@
 
 在 `Cargo.toml` 中加入引用
 ```toml
-ftlog = "0.2.0"
+ftlog = "0.2"
 ```
 
 在`main`函数开头加入配置：

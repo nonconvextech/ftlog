@@ -24,7 +24,7 @@ code. Use this crate only in rust `nightly` channel.
 Add to your `Cargo.toml`:
 
 ```toml
-ftlog = "0.2.0"
+ftlog = "0.2"
 ```
 
 Configure and initialize ftlog at the start of your `main` function:
