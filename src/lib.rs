@@ -840,19 +840,9 @@ impl Builder {
                         }
                         Ok(LoggerInput::Flush) => {
                             let max = receiver.len();
-                            receiver
-                                .recv()
-                                .into_iter()
-                                .take(max)
-                                .filter_map(|f| {
-                                    if let LoggerInput::LogMsg(msg) = f {
-                                        Some(msg)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .for_each(|l| {
-                                    l.write(
+                            for _ in 1..=max {
+                                if let Ok(LoggerInput::LogMsg(msg)) = receiver.try_recv() {
+                                    msg.write(
                                         &filters,
                                         &mut appenders,
                                         &mut root,
@@ -860,7 +850,8 @@ impl Builder {
                                         &mut missed_log,
                                         &mut last_log,
                                     )
-                                });
+                                }
+                            }
                             let flush_result = appenders
                                 .values_mut()
                                 .chain([&mut root])
