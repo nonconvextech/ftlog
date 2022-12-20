@@ -918,6 +918,12 @@ impl Builder {
             stopped: AtomicBool::new(false),
         })
     }
+
+    /// try building and setting as global logger
+    pub fn try_init(self) -> Result<(), Box<dyn std::error::Error>> {
+        let logger = self.build()?;
+        Ok(logger.init()?)
+    }
 }
 
 impl Default for Builder {
