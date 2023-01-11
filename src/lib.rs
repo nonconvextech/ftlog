@@ -617,7 +617,7 @@ pub struct Builder {
     format: Box<dyn FtLogFormat>,
     level: Option<LevelFilter>,
     root_level: Option<LevelFilter>,
-    root: Option<Box<dyn Write + Send>>,
+    root: Box<dyn Write + Send>,
     appenders: HashMap<&'static str, Box<dyn Write + Send + 'static>>,
     filters: Vec<Directive>,
     bounded_channel_option: Option<BoundedChannelOption>,
@@ -649,7 +649,7 @@ impl Builder {
             format: Box::new(FtLogFormatter),
             level: None,
             root_level: None,
-            root: None,
+            root: Box::new(stderr()) as Box<dyn Write + Send>,
             appenders: HashMap::new(),
             filters: Vec::new(),
             bounded_channel_option: Some(BoundedChannelOption {
@@ -730,7 +730,7 @@ impl Builder {
     #[inline]
     pub fn filter<A: Into<Option<&'static str>>, L: Into<Option<LevelFilter>>>(
         mut self,
-        target: &'static str,
+        module_path: &'static str,
         appender: A,
         level: L,
     ) -> Builder {
@@ -738,7 +738,7 @@ impl Builder {
         let level = level.into();
         if appender.is_some() || level.is_some() {
             self.filters.push(Directive {
-                path: target,
+                path: module_path,
                 appender: appender,
                 level: level,
             });
@@ -751,7 +751,7 @@ impl Builder {
     ///
     /// Omit this method will output to stderr.
     pub fn root(mut self, writer: impl Write + Send + 'static) -> Builder {
-        self.root = Some(Box::new(writer));
+        self.root = Box::new(writer);
         self
     }
 
@@ -819,10 +819,7 @@ impl Builder {
                     }
                 }
 
-                let mut root: Box<dyn Write + Send> = match self.root {
-                    Some(w) => w,
-                    _ => Box::new(stderr()) as Box<dyn Write + Send>,
-                };
+                let mut root = self.root;
                 let mut last_log = FxHashMap::default();
                 let mut missed_log = FxHashMap::default();
                 let mut last_flush = Instant::now();
