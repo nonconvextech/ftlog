@@ -864,6 +864,22 @@ impl Builder {
                             }
                         }
                         Ok(LoggerInput::Quit) => {
+                            let max = receiver.len();
+                            for _ in 1..=max {
+                                if let Ok(LoggerInput::LogMsg(msg)) = receiver.try_recv() {
+                                    msg.write(
+                                        &filters,
+                                        &mut appenders,
+                                        &mut root,
+                                        root_level,
+                                        &mut missed_log,
+                                        &mut last_log,
+                                    )
+                                }
+                            }
+                            appenders.values_mut().chain([&mut root]).for_each(|w| {
+                                let _ = w.flush();
+                            });
                             break;
                         }
                         Err(RecvTimeoutError::Timeout) => {
