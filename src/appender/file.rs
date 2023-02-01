@@ -68,9 +68,10 @@ use std::{
     fs::{File, OpenOptions},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
+    time::Instant,
 };
 
-use time::{Duration, PreciseTime, Tm};
+use time::{Date, Duration, Month, OffsetDateTime, Time};
 
 /// Log rotation frequency
 #[derive(Clone, Copy)]
@@ -87,10 +88,10 @@ pub enum Period {
     Year,
 }
 struct Rotate {
-    start: PreciseTime,
+    start: Instant,
     wait: Duration,
     period: Period,
-    keep: Option<std::time::Duration>,
+    keep: Option<Duration>,
 }
 
 /// Appender to local file
@@ -118,38 +119,26 @@ impl FileAppender {
 
     fn file<T: AsRef<Path>>(path: T, period: Period) -> PathBuf {
         let p = path.as_ref();
-        let tm = time::now();
+        let dt = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
         let ts = match period {
-            Period::Year => {
-                let year = tm.tm_year + 1900;
-                format!("{}", year)
-            }
-            Period::Month => {
-                let year = tm.tm_year + 1900;
-                let month = tm.tm_mon + 1;
-                format!("{}{:02}", year, month)
-            }
-            Period::Day => {
-                let year = tm.tm_year + 1900;
-                let month = tm.tm_mon + 1;
-                let day = tm.tm_mday;
-                format!("{}{:02}{:02}", year, month, day)
-            }
-            Period::Hour => {
-                let year = tm.tm_year + 1900;
-                let month = tm.tm_mon + 1;
-                let day = tm.tm_mday;
-                let hour = tm.tm_hour;
-                format!("{}{:02}{:02}T{:02}", year, month, day, hour)
-            }
-            Period::Minute => {
-                let year = tm.tm_year + 1900;
-                let month = tm.tm_mon + 1;
-                let day = tm.tm_mday;
-                let hour = tm.tm_hour;
-                let minute = tm.tm_min;
-                format!("{}{:02}{:02}T{:02}{:02}", year, month, day, hour, minute)
-            }
+            Period::Year => format!("{}", dt.year()),
+            Period::Month => format!("{}{:02}", dt.year(), dt.month() as u8),
+            Period::Day => format!("{}{:02}{:02}", dt.year(), dt.month() as u8, dt.day()),
+            Period::Hour => format!(
+                "{}{:02}{:02}T{:02}",
+                dt.year(),
+                dt.month() as u8,
+                dt.day(),
+                dt.hour()
+            ),
+            Period::Minute => format!(
+                "{}{:02}{:02}T{:02}{:02}",
+                dt.year(),
+                dt.month() as u8,
+                dt.day(),
+                dt.hour(),
+                dt.minute()
+            ),
         };
 
         if let Some(ext) = p.extension() {
@@ -214,64 +203,42 @@ impl FileAppender {
                 start,
                 wait,
                 period,
-                keep: Some(keep.to_std().unwrap()),
+                keep: Some(keep),
             }),
         }
     }
 
-    fn until(period: Period) -> (PreciseTime, Duration) {
-        let tm_now = time::now();
-        let now = PreciseTime::now();
+    fn until(period: Period) -> (Instant, Duration) {
+        let tm_now = OffsetDateTime::now_utc();
+        let now = Instant::now();
         let tm_next = Self::next(&tm_now, period);
         (now, tm_next - tm_now)
     }
 
     #[inline]
-    fn next(now: &Tm, period: Period) -> Tm {
-        let mut tm_next = now.clone();
+    fn next(now: &OffsetDateTime, period: Period) -> OffsetDateTime {
         let tm_next = match period {
-            Period::Year => {
-                tm_next.tm_mon = 0;
-                tm_next.tm_mday = 1;
-                tm_next.tm_hour = 0;
-                tm_next.tm_min = 0;
-                tm_next.tm_sec = 0;
-                tm_next.tm_nsec = 0;
-                tm_next.tm_year += 1;
-                time::at(tm_next.to_timespec())
-            }
+            Period::Year => Date::from_ordinal_date(now.year() + 1, 1)
+                .unwrap()
+                .with_time(Time::MIDNIGHT),
             Period::Month => {
-                tm_next.tm_mon += 1;
-                tm_next.tm_mday = 1;
-                tm_next.tm_hour = 0;
-                tm_next.tm_min = 0;
-                tm_next.tm_sec = 0;
-                tm_next.tm_nsec = 0;
-                time::at(tm_next.to_timespec())
+                let year = if now.month() == Month::December {
+                    now.year() + 1
+                } else {
+                    now.year()
+                };
+                Date::from_calendar_date(year, now.month().next(), 1)
+                    .unwrap()
+                    .with_time(Time::MIDNIGHT)
             }
-            Period::Day => {
-                tm_next.tm_mday += 1;
-                tm_next.tm_hour = 0;
-                tm_next.tm_min = 0;
-                tm_next.tm_sec = 0;
-                tm_next.tm_nsec = 0;
-                time::at(tm_next.to_timespec())
-            }
-            Period::Hour => {
-                tm_next.tm_hour += 1;
-                tm_next.tm_min = 0;
-                tm_next.tm_sec = 0;
-                tm_next.tm_nsec = 0;
-                time::at(tm_next.to_timespec())
-            }
+            Period::Day => now.date().with_time(Time::MIDNIGHT) + Duration::DAY,
+            Period::Hour => now.date().with_hms(now.time().hour(), 0, 0).unwrap() + Duration::HOUR,
             Period::Minute => {
-                tm_next.tm_min += 1;
-                tm_next.tm_sec = 0;
-                tm_next.tm_nsec = 0;
-                time::at(tm_next.to_timespec())
+                let time = now.time();
+                now.date().with_hms(time.hour(), time.minute(), 0).unwrap() + Duration::MINUTE
             }
         };
-        tm_next
+        tm_next.assume_offset(now.offset())
     }
 }
 
@@ -284,7 +251,7 @@ impl Write for FileAppender {
             keep,
         }) = &mut self.rotate
         {
-            if start.to(PreciseTime::now()) > *wait {
+            if start.elapsed() > *wait {
                 // close current file and create new file
                 self.file.flush()?;
                 let path = Self::file(&self.path, *period);
@@ -374,31 +341,61 @@ impl Write for FileAppender {
 #[cfg(test)]
 mod test {
     use super::*;
-    use time::Timespec;
+
+    fn format(time: OffsetDateTime) -> String {
+        format!(
+            "{:0>4}-{:0>2}-{:0>2}T{:0>2}:{:0>2}:{:0>2}.{:0>3}",
+            time.year(),
+            time.month() as u8,
+            time.day(),
+            time.hour(),
+            time.minute(),
+            time.second(),
+            time.millisecond()
+        )
+    }
+
     #[test]
     fn to_wait_ms() {
         // Mon Oct 24 2022 16:00:00 GMT+0000
-        let now = time::at(Timespec::new(1666627200, 0)).to_utc();
+        let now = OffsetDateTime::from_unix_timestamp(1666627200).unwrap();
 
         let tm_next = FileAppender::next(&now, Period::Year);
-        let tm = time::at(Timespec::new(1672531200, 0));
-        assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
+        let tm = OffsetDateTime::from_unix_timestamp(1672531200).unwrap();
+        assert_eq!(tm_next, tm, "{} != {}", format(now), format(tm_next));
 
         let tm_next = FileAppender::next(&now, Period::Month);
-        let tm = time::at(Timespec::new(1667260800, 0));
-        assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
+        let tm = OffsetDateTime::from_unix_timestamp(1667260800).unwrap();
+        assert_eq!(tm_next, tm, "{} != {}", format(now), format(tm_next));
 
         let tm_next = FileAppender::next(&now, Period::Day);
-        let tm = time::at(Timespec::new(1666656000, 0));
-        assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
+        let tm = OffsetDateTime::from_unix_timestamp(1666656000).unwrap();
+        assert_eq!(tm_next, tm, "{} != {}", format(now), format(tm_next));
 
         let tm_next = FileAppender::next(&now, Period::Hour);
-        let tm = time::at(Timespec::new(1666630800, 0));
-        assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
+        let tm = OffsetDateTime::from_unix_timestamp(1666630800).unwrap();
+        assert_eq!(tm_next, tm, "{} != {}", format(now), format(tm_next));
 
         let tm_next = FileAppender::next(&now, Period::Minute);
-        let tm = time::at(Timespec::new(1666627260, 0));
-        println!("{}", tm_next.to_timespec().sec);
-        assert_eq!(tm_next, tm, "{} != {}", now.rfc3339(), tm_next.rfc3339());
+        let tm = OffsetDateTime::from_unix_timestamp(1666627260).unwrap();
+        assert_eq!(tm_next, tm, "{} != {}", format(now), format(tm_next));
+
+        // edge case: last day of the month
+        let date = Date::from_calendar_date(2023, Month::January, 31).unwrap();
+        let dt = date.with_time(Time::MIDNIGHT).assume_offset(now.offset());
+        let tm_next = FileAppender::next(&dt, Period::Day);
+        let tm = dt + Duration::DAY;
+        assert_eq!(tm_next, tm, "{} != {}", format(now), format(tm_next));
+
+        // edge case: last month of the year
+        let date = Date::from_calendar_date(2022, Month::December, 1).unwrap();
+        let dt = date.with_time(Time::MIDNIGHT).assume_offset(now.offset());
+        let tm_next = FileAppender::next(&dt, Period::Month);
+        let tm = Date::from_calendar_date(2023, Month::January, 1)
+            .unwrap()
+            .with_hms(0, 0, 0)
+            .unwrap()
+            .assume_offset(now.offset());
+        assert_eq!(tm_next, tm, "{} != {}", format(now), format(tm_next));
     }
 }

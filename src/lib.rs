@@ -216,6 +216,7 @@ use arc_swap::ArcSwap;
 pub use log::{
     debug, error, info, log, log_enabled, logger, trace, warn, Level, LevelFilter, Record,
 };
+use time::{OffsetDateTime, UtcOffset};
 
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -228,12 +229,33 @@ use std::time::{Duration, Instant};
 use crossbeam_channel::{bounded, unbounded, Receiver, RecvTimeoutError, Sender, TrySendError};
 use hashbrown::HashMap;
 use log::{kv::Key, set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
-use time::{get_time, Timespec};
 
 pub mod appender;
 
+use tm::{duration, now, to_offset_datetime, Time};
+
+mod tm {
+    use super::*;
+
+    pub type Time = std::time::SystemTime;
+    #[inline]
+    pub fn now() -> Time {
+        std::time::SystemTime::now()
+    }
+    #[inline]
+    pub fn to_offset_datetime(time: Time) -> OffsetDateTime {
+        let utc: OffsetDateTime = time.into();
+        utc.to_offset(UtcOffset::local_offset_at(utc).unwrap_or(UtcOffset::UTC))
+    }
+
+    #[inline]
+    pub fn duration(from: Time, to: Time) -> Duration {
+        to.duration_since(from).unwrap_or_default()
+    }
+}
+
 struct LogMsg {
-    tm: Timespec,
+    time: Time,
     msg: Box<dyn Sync + Send + Display>,
     level: Level,
     target: String,
@@ -248,10 +270,9 @@ impl LogMsg {
         root: &mut Box<dyn Write + Send>,
         root_level: LevelFilter,
         missed_log: &mut HashMap<u64, i64>,
-        last_log: &mut HashMap<u64, i64>,
+        last_log: &mut HashMap<u64, Time>,
     ) {
-        let now = get_time();
-        let now_nanos = now.sec * 1000_000_000 + now.nsec as i64;
+        let now = now();
 
         let writer = if let Some(filter) = filters.iter().find(|x| self.target.starts_with(x.path))
         {
@@ -270,53 +291,49 @@ impl LogMsg {
         };
 
         if self.limit > 0 {
-            let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0_i64);
-            if let Some(last_nanos) = last_log.get(&self.limit_key) {
-                if now_nanos - last_nanos < self.limit as i64 * 1_000_000 {
+            let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0);
+            if let Some(last) = last_log.get(&self.limit_key) {
+                if duration(*last, now) < Duration::from_millis(self.limit as u64) {
                     *missed_entry += 1;
                     return;
                 }
             }
-            last_log.insert(self.limit_key, now_nanos);
-            let delay =
-                (now_nanos - (self.tm.sec * 1000_000_000 + self.tm.nsec as i64)) / 1_000_000;
-            let tm = time::at(self.tm);
-            let tm_millisec = tm.tm_nsec / 1_000_000;
+            last_log.insert(self.limit_key, now);
+            let delay = duration(self.time, now);
+            let offset_datetime = to_offset_datetime(self.time);
 
             writeln!(
                 writer,
                 "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {} {}",
-                tm.tm_year + 1900,
-                tm.tm_mon + 1,
-                tm.tm_mday,
-                tm.tm_hour,
-                tm.tm_min,
-                tm.tm_sec,
-                tm_millisec,
-                tm.tm_utcoff / 3600,
-                delay,
+                offset_datetime.year(),
+                offset_datetime.month() as u8,
+                offset_datetime.day(),
+                offset_datetime.hour(),
+                offset_datetime.minute(),
+                offset_datetime.second(),
+                offset_datetime.millisecond(),
+                offset_datetime.offset(),
+                delay.as_millis(),
                 *missed_entry,
                 self.msg
             )
             .expect("logger write message failed");
             *missed_entry = 0;
         } else {
-            let delay =
-                (now_nanos - (self.tm.sec * 1000_000_000 + self.tm.nsec as i64)) / 1_000_000;
-            let tm = time::at(self.tm);
-            let tm_millisec = tm.tm_nsec / 1_000_000;
+            let delay = duration(self.time, now);
+            let offset_datetime = to_offset_datetime(self.time);
             writeln!(
                 writer,
                 "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {}",
-                tm.tm_year + 1900,
-                tm.tm_mon + 1,
-                tm.tm_mday,
-                tm.tm_hour,
-                tm.tm_min,
-                tm.tm_sec,
-                tm_millisec,
-                tm.tm_utcoff / 3600,
-                delay,
+                offset_datetime.year(),
+                offset_datetime.month() as u8,
+                offset_datetime.day(),
+                offset_datetime.hour(),
+                offset_datetime.minute(),
+                offset_datetime.second(),
+                offset_datetime.millisecond(),
+                offset_datetime.offset(),
+                delay.as_millis(),
                 self.msg
             )
             .expect("logger write message failed");
@@ -500,7 +517,7 @@ impl Log for Logger {
             b.finish()
         };
         let msg = LoggerInput::LogMsg(LogMsg {
-            tm: get_time(),
+            time: now(),
             msg: msg,
             target: record.target().to_owned(),
             level: record.level(),

@@ -29,7 +29,14 @@ jobs:
         with:
           toolchain: nightly
           command: check
-          args: --all --bins --examples --tests
+          args: --all --bins --examples --tests --no-default-features
+
+      - name: check build (feature:tsc)
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: nightly
+          command: check
+          args: --all --bins --examples --tests --features=tsc
 
       - name: tests
         uses: actions-rs/cargo@v1
@@ -37,7 +44,15 @@ jobs:
         with:
           toolchain: nightly
           command: test
-          args: --all --no-fail-fast -- --nocapture
+          args: --all --no-fail-fast -- --nocapture --no-default-features
+
+      - name: tests (feature:tsc)
+        uses: actions-rs/cargo@v1
+        timeout-minutes: 40
+        with:
+          toolchain: nightly
+          command: test
+          args: --all --no-fail-fast -- --nocapture --features=tsc
 
   doc:
     runs-on: ubuntu-latest
