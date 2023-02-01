@@ -51,7 +51,7 @@ fn init() {
         }
     }
 
-    let logger = ftlog::Builder::new()
+    ftlog::Builder::new()
         // use our own format
         .format(MyFormatter)
         // global max log level
@@ -74,9 +74,8 @@ fn init() {
         .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
         // new appender, rotate to new file every Day
         .appender("ftlog", FileAppender::rotate("ftlog.log", Period::Day))
-        .build()
-        .expect("logger build failed");
-    logger.init().expect("set logger failed");
+        .try_init()
+        .expect("logger build or set failed");
 }
 
 fn main() {
@@ -87,7 +86,6 @@ fn main() {
         info!(limit=3000; "limit running{} !", i);
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    log::logger().flush(); // force flush, otherwise log might be incomplete
     std::thread::sleep(std::time::Duration::from_secs(1));
 }
 

@@ -30,17 +30,13 @@
 //! use log::{error, info, warn};
 //!
 //! // minimal configuration with default setting
-//! ftlog::builder().build().unwrap().init().unwrap();
+//! ftlog::builder().try_init().unwrap();
 //!
 //! trace!("Hello world!");
 //! debug!("Hello world!");
 //! info!("Hello world!");
 //! warn!("Hello world!");
 //! error!("Hello world!");
-//!
-//! // when main thread is done, logging thread may be busy printing messages
-//! // wait for log output to flush, otherwise messages in memory yet might lost
-//! ftlog::logger().flush();
 //! ```
 //!
 //! A more complicated but feature rich usage:
@@ -74,10 +70,8 @@
 //!     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
 //!     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
 //!     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
-//!     .build()
-//!     .expect("logger build failed");
-//! // init global logger
-//! logger.init().expect("set logger failed");
+//!     .try_init()
+//!     .expect("logger build or set failed");
 //! ```
 //!
 //! See `./examples` for more (e.g. custom format).
