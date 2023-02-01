@@ -1,4 +1,3 @@
-#![feature(unchecked_math)]
 //! [![Build Status](https://github.com/nonconvextech/ftlog/workflows/CI%20%28Linux%29/badge.svg?branch=main)](https://github.com/nonconvextech/ftlog/actions)
 //! ![License](https://img.shields.io/crates/l/ftlog.svg)
 //! [![Latest Version](https://img.shields.io/crates/v/ftlog.svg)](https://crates.io/crates/ftlog)
@@ -13,9 +12,6 @@
 //!
 //! `ftlog` can improve log performance in main/worker thread a few times over. See
 //! performance for details.
-//!
-//! **CAUTION**: This crate uses the `unchecked_math` unstable feature and `unsafe`
-//! code. Use this crate only in rust `nightly` channel.
 //!
 //!
 //! # Usage
@@ -222,17 +218,16 @@ pub use log::{
 };
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt::Display;
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::io::{stderr, Error as IoError, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{bounded, unbounded, Receiver, RecvTimeoutError, Sender, TrySendError};
-use fxhash::FxHashMap;
-use log::kv::Key;
-use log::{set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
+use hashbrown::HashMap;
+use log::{kv::Key, set_boxed_logger, set_max_level, Log, Metadata, SetLoggerError};
 use time::{get_time, Timespec};
 
 pub mod appender;
@@ -252,8 +247,8 @@ impl LogMsg {
         appenders: &mut HashMap<&'static str, Box<dyn Write + Send>>,
         root: &mut Box<dyn Write + Send>,
         root_level: LevelFilter,
-        missed_log: &mut FxHashMap<u64, i64>,
-        last_log: &mut FxHashMap<u64, i64>,
+        missed_log: &mut HashMap<u64, i64>,
+        last_log: &mut HashMap<u64, i64>,
     ) {
         let now = get_time();
         let now_nanos = now.sec * 1000_000_000 + now.nsec as i64;
@@ -498,17 +493,11 @@ impl Log for Logger {
         let limit_key = if limit == 0 {
             0
         } else {
-            let mut hash_id = 2166136261_u64;
-            unsafe {
-                for c in record.module_path().unwrap_or("").as_bytes() {
-                    hash_id = hash_id.unchecked_mul(16777619) ^ (*c as u64);
-                }
-                for c in record.file().unwrap_or("").as_bytes() {
-                    hash_id = hash_id.unchecked_mul(16777619) ^ (*c as u64);
-                }
-                hash_id = hash_id.unchecked_mul(16777619) ^ (record.line().unwrap_or(0) as u64);
-            }
-            hash_id
+            let mut b = hashbrown::hash_map::DefaultHashBuilder::default().build_hasher();
+            record.module_path().unwrap_or("").as_bytes().hash(&mut b);
+            record.file().unwrap_or("").as_bytes().hash(&mut b);
+            record.line().unwrap_or(0).hash(&mut b);
+            b.finish()
         };
         let msg = LoggerInput::LogMsg(LogMsg {
             tm: get_time(),
@@ -820,8 +809,8 @@ impl Builder {
                 }
 
                 let mut root = self.root;
-                let mut last_log = FxHashMap::default();
-                let mut missed_log = FxHashMap::default();
+                let mut last_log = HashMap::default();
+                let mut missed_log = HashMap::default();
                 let mut last_flush = Instant::now();
                 loop {
                     match receiver.recv_timeout(Duration::from_millis(200)) {

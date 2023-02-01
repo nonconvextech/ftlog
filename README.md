@@ -15,9 +15,6 @@ thread and computing as little as possible in the main/worker thread.
 `ftlog` can improve log performance in main/worker thread a few times over. See
 performance for details.
 
-**CAUTION**: This crate uses the `unchecked_math` unstable feature and `unsafe`
-code. Use this crate only in rust `nightly` channel.
-
 
 ## Usage
 
