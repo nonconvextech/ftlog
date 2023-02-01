@@ -837,7 +837,7 @@ impl Builder {
                         }
                         Ok(LoggerInput::Flush) => {
                             let max = receiver.len();
-                            for _ in 1..=max {
+                            'queue: for _ in 1..=max {
                                 if let Ok(LoggerInput::LogMsg(msg)) = receiver.try_recv() {
                                     msg.write(
                                         &filters,
@@ -847,6 +847,8 @@ impl Builder {
                                         &mut missed_log,
                                         &mut last_log,
                                     )
+                                } else {
+                                    break 'queue;
                                 }
                             }
                             let flush_result = appenders
@@ -865,7 +867,7 @@ impl Builder {
                         }
                         Ok(LoggerInput::Quit) => {
                             let max = receiver.len();
-                            for _ in 1..=max {
+                            'queue: for _ in 1..=max {
                                 if let Ok(LoggerInput::LogMsg(msg)) = receiver.try_recv() {
                                     msg.write(
                                         &filters,
@@ -875,6 +877,8 @@ impl Builder {
                                         &mut missed_log,
                                         &mut last_log,
                                     )
+                                } else {
+                                    break 'queue;
                                 }
                             }
                             appenders.values_mut().chain([&mut root]).for_each(|w| {
