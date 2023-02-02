@@ -63,14 +63,17 @@
 //! // Rotate every day, clean stale logs that were modified 7 days ago on each rotation
 //! let appender = FileAppender::rotate_with_expire("./current.log", Period::Day, Duration::days(7));
 //! ```
+#[cfg(not(feature = "tsc"))]
+use std::time::Instant;
 use std::{
     borrow::Cow,
     fs::{File, OpenOptions},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
-    time::Instant,
 };
 
+#[cfg(feature = "tsc")]
+use minstant::Instant;
 use time::{Date, Duration, Month, OffsetDateTime, Time};
 
 /// Log rotation frequency
@@ -90,8 +93,9 @@ pub enum Period {
 struct Rotate {
     start: Instant,
     wait: Duration,
+
     period: Period,
-    keep: Option<Duration>,
+    expire: Option<Duration>,
 }
 
 /// Appender to local file
@@ -177,7 +181,7 @@ impl FileAppender {
                 start,
                 wait,
                 period,
-                keep: None,
+                expire: None,
             }),
         }
     }
@@ -203,7 +207,7 @@ impl FileAppender {
                 start,
                 wait,
                 period,
-                keep: Some(keep),
+                expire: Some(keep),
             }),
         }
     }
@@ -248,7 +252,7 @@ impl Write for FileAppender {
             start,
             wait,
             period,
-            keep,
+            expire: keep,
         }) = &mut self.rotate
         {
             if start.elapsed() > *wait {

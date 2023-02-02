@@ -193,6 +193,19 @@
 //! logger.init().unwrap();
 //! ```
 //!
+//! # Features
+//! - **tsc**
+//!   Use [TSC](https://en.wikipedia.org/wiki/Time_Stamp_Counter) for clock source for higher performance without
+//!   accuracy loss.
+//!   
+//!   TSC offers the most accurate and cheapest way to access current time under certain condition:
+//!   1. the CPU frequency must be constant
+//!   1. must with CPU of x86 architecture, since TSC is an x86 specific register.
+//!
+//!   The current feature further requires that the build target **MUST BE LINUX**. Otherwise it will fall back to
+//!   a fast but less accurate implementation.
+//!   
+//!
 //! # Performance
 //!
 //! > Rust：1.67.0-nightly
@@ -228,6 +241,7 @@ pub mod appender;
 
 use tm::{duration, now, to_offset_datetime, Time};
 
+#[cfg(not(feature = "tsc"))]
 mod tm {
     use super::*;
 
@@ -239,12 +253,34 @@ mod tm {
     #[inline]
     pub fn to_offset_datetime(time: Time) -> OffsetDateTime {
         let utc: OffsetDateTime = time.into();
-        utc.to_offset(UtcOffset::local_offset_at(utc).unwrap_or(UtcOffset::UTC))
+        utc.to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC))
     }
 
     #[inline]
     pub fn duration(from: Time, to: Time) -> Duration {
         to.duration_since(from).unwrap_or_default()
+    }
+}
+
+#[cfg(feature = "tsc")]
+mod tm {
+    use super::*;
+    pub type Time = minstant::Instant;
+    #[inline]
+    pub fn now() -> Time {
+        minstant::Instant::now()
+    }
+    #[inline]
+    pub fn to_offset_datetime(time: Time) -> OffsetDateTime {
+        static ANCHOR: once_cell::sync::Lazy<minstant::Anchor> =
+            once_cell::sync::Lazy::new(|| minstant::Anchor::new());
+        let utc =
+            OffsetDateTime::from_unix_timestamp_nanos(time.as_unix_nanos(&ANCHOR) as i128).unwrap();
+        utc.to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC))
+    }
+    #[inline]
+    pub fn duration(from: Time, to: Time) -> Duration {
+        to.duration_since(from)
     }
 }
 
