@@ -306,7 +306,7 @@ impl LogMsg {
                 offset_datetime.minute(),
                 offset_datetime.second(),
                 offset_datetime.millisecond(),
-                offset_datetime.offset(),
+                offset_datetime.offset().whole_hours(),
                 delay.as_millis(),
                 *missed_entry,
                 self.msg
@@ -326,7 +326,7 @@ impl LogMsg {
                 offset_datetime.minute(),
                 offset_datetime.second(),
                 offset_datetime.millisecond(),
-                offset_datetime.offset(),
+                offset_datetime.offset().whole_hours(),
                 delay.as_millis(),
                 self.msg
             )
