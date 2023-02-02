@@ -1,77 +1,82 @@
-name: CI (Linux)
+name: ftlog
 
 on: [push, pull_request]
 
 jobs:
   build_and_test:
-
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
 
     steps:
       - uses: actions/checkout@v2
 
-      - name: Install latest nightly
+      - name: Install cargo
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
-            override: true
+            toolchain: stable
             components: rustfmt
 
       - name: rustfmt
         uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly
           command: fmt
           args: --all -- --check
 
       - name: check build
         uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly
           command: check
           args: --all --bins --examples --tests --no-default-features
-
-      - name: check build (feature:tsc)
-        uses: actions-rs/cargo@v1
-        with:
-          toolchain: nightly
-          command: check
-          args: --all --bins --examples --tests --features=tsc
 
       - name: tests
         uses: actions-rs/cargo@v1
         timeout-minutes: 40
         with:
-          toolchain: nightly
           command: test
-          args: --all --no-fail-fast -- --nocapture --no-default-features
+          args: --all --no-fail-fast --no-default-features --release -- --nocapture 
+
+  test_tsc:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install latest cargo
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+            components: rustfmt
+
+      - name: check build (feature:tsc)
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --all --bins --examples --tests --features=tsc
 
       - name: tests (feature:tsc)
         uses: actions-rs/cargo@v1
         timeout-minutes: 40
         with:
-          toolchain: nightly
           command: test
-          args: --all --no-fail-fast -- --nocapture --features=tsc
+          args: --all --no-fail-fast --features=tsc --release -- --nocapture
 
   doc:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
-      - name: Install latest nightly
+      - name: Install latest cargo
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
-            override: true
-            components: rustfmt
+            toolchain: stable
 
       - name: doc
         uses: actions-rs/cargo@v1
         env:
           RUSTDOCFLAGS: -Dwarnings
         with:
-          toolchain: nightly
           command: doc
           args: --all --no-deps
 
@@ -82,12 +87,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install latest nightly
+      - name: Install latest cargo
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
-            override: true
-            components: rustfmt
+            toolchain: stable
 
       - name: login
         env:
@@ -98,5 +101,4 @@ jobs:
       - name: publish
         uses: actions-rs/cargo@v1
         with:
-          toolchain: nightly
           command: publish
