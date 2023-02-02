@@ -76,6 +76,8 @@ use std::{
 use minstant::Instant;
 use time::{Date, Duration, Month, OffsetDateTime, Time};
 
+use crate::local_timezone;
+
 /// Log rotation frequency
 #[derive(Clone, Copy)]
 pub enum Period {
@@ -213,7 +215,7 @@ impl FileAppender {
     }
 
     fn until(period: Period) -> (Instant, Duration) {
-        let tm_now = OffsetDateTime::now_utc();
+        let tm_now = OffsetDateTime::now_utc().to_offset(local_timezone());
         let now = Instant::now();
         let tm_next = Self::next(&tm_now, period);
         (now, tm_next - tm_now)

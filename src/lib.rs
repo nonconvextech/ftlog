@@ -65,6 +65,9 @@
 //!         Period::Day,
 //!         Duration::days(7),
 //!     ))
+//!     // Do not convert to local timezone for timestamp, this does not affect worker thread,
+//!     // but can boost log thread performance (higher throughput).
+//!     .utc()
 //!     // level filter for root appender
 //!     .root_log_level(LevelFilter::Warn)
 //!     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
@@ -239,7 +242,7 @@ use log::{kv::Key, set_boxed_logger, set_max_level, Log, Metadata, SetLoggerErro
 
 pub mod appender;
 
-use tm::{duration, now, to_offset_datetime, Time};
+use tm::{duration, now, to_utc, Time};
 
 #[cfg(not(feature = "tsc"))]
 mod tm {
@@ -251,9 +254,8 @@ mod tm {
         std::time::SystemTime::now()
     }
     #[inline]
-    pub fn to_offset_datetime(time: Time) -> OffsetDateTime {
-        let utc: OffsetDateTime = time.into();
-        utc.to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC))
+    pub fn to_utc(time: Time) -> OffsetDateTime {
+        time.into()
     }
 
     #[inline]
@@ -271,17 +273,29 @@ mod tm {
         minstant::Instant::now()
     }
     #[inline]
-    pub fn to_offset_datetime(time: Time) -> OffsetDateTime {
+    pub fn to_utc(time: Time) -> OffsetDateTime {
         static ANCHOR: once_cell::sync::Lazy<minstant::Anchor> =
             once_cell::sync::Lazy::new(|| minstant::Anchor::new());
-        let utc =
-            OffsetDateTime::from_unix_timestamp_nanos(time.as_unix_nanos(&ANCHOR) as i128).unwrap();
-        utc.to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC))
+        OffsetDateTime::from_unix_timestamp_nanos(time.as_unix_nanos(&ANCHOR) as i128).unwrap()
     }
     #[inline]
     pub fn duration(from: Time, to: Time) -> Duration {
         to.duration_since(from)
     }
+}
+
+#[cfg(target_family = "unix")]
+fn local_timezone() -> UtcOffset {
+    UtcOffset::current_local_offset().unwrap_or_else(|_| {
+        let tz = tz::TimeZone::local().unwrap();
+        let current_local_time_type = tz.find_current_local_time_type().unwrap();
+        let diff_secs = current_local_time_type.ut_offset();
+        UtcOffset::from_whole_seconds(diff_secs).unwrap()
+    })
+}
+#[cfg(not(target_family = "unix"))]
+fn local_timezone() -> UtcOffset {
+    UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC)
 }
 
 struct LogMsg {
@@ -301,6 +315,7 @@ impl LogMsg {
         root_level: LevelFilter,
         missed_log: &mut HashMap<u64, i64>,
         last_log: &mut HashMap<u64, Time>,
+        offset: Option<UtcOffset>,
     ) {
         let now = now();
 
@@ -330,11 +345,14 @@ impl LogMsg {
             }
             last_log.insert(self.limit_key, now);
             let delay = duration(self.time, now);
-            let offset_datetime = to_offset_datetime(self.time);
+            let utc_datetime = to_utc(self.time);
 
-            writeln!(
-                writer,
-                "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {} {}",
+            let offset_datetime = offset
+                .map(|o| utc_datetime.to_offset(o))
+                .unwrap_or(utc_datetime);
+
+            let s = format!(
+                "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {} {}\n",
                 offset_datetime.year(),
                 offset_datetime.month() as u8,
                 offset_datetime.day(),
@@ -346,15 +364,19 @@ impl LogMsg {
                 delay.as_millis(),
                 *missed_entry,
                 self.msg
-            )
-            .expect("logger write message failed");
+            );
+            if let Err(e) = writer.write_all(s.as_bytes()) {
+                eprintln!("logger write message failed: {}", e);
+            };
             *missed_entry = 0;
         } else {
             let delay = duration(self.time, now);
-            let offset_datetime = to_offset_datetime(self.time);
-            writeln!(
-                writer,
-                "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {}",
+            let utc_datetime = to_utc(self.time);
+            let offset_datetime = offset
+                .map(|o| utc_datetime.to_offset(o))
+                .unwrap_or(utc_datetime);
+            let s = format!(
+                "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {}\n",
                 offset_datetime.year(),
                 offset_datetime.month() as u8,
                 offset_datetime.day(),
@@ -365,8 +387,10 @@ impl LogMsg {
                 offset_datetime.offset().whole_hours(),
                 delay.as_millis(),
                 self.msg
-            )
-            .expect("logger write message failed");
+            );
+            if let Err(e) = writer.write_all(s.as_bytes()) {
+                eprintln!("logger write message failed: {}", e);
+            };
         }
     }
 }
@@ -618,7 +642,6 @@ struct BoundedChannelOption {
 
 /// Ftlog builder
 ///
-///
 /// ```
 /// # use ftlog::appender::{FileAppender, Duration, Period};
 /// # use log::LevelFilter;
@@ -649,6 +672,12 @@ struct BoundedChannelOption {
 ///     .build()
 ///     .expect("logger build failed");
 /// ```
+///
+/// # Local timezone
+/// For performance reason, `ftlog` only retrieve timezone info once and use this
+/// local timezone offset forever. Thus timestamp in log does not aware of timezone
+/// change by OS.
+///
 pub struct Builder {
     format: Box<dyn FtLogFormat>,
     level: Option<LevelFilter>,
@@ -657,6 +686,7 @@ pub struct Builder {
     appenders: HashMap<&'static str, Box<dyn Write + Send + 'static>>,
     filters: Vec<Directive>,
     bounded_channel_option: Option<BoundedChannelOption>,
+    local_timezone: bool,
 }
 
 /// Handy function to get ftlog builder
@@ -680,6 +710,7 @@ impl Builder {
     /// - output to stderr
     /// - bounded channel between worker thread and log thread, with a size limit of 100_000
     /// - discard excessive log messages
+    /// - log with timestamp of local timezone
     pub fn new() -> Builder {
         Builder {
             format: Box::new(FtLogFormatter),
@@ -693,6 +724,7 @@ impl Builder {
                 block: false,
                 print: false,
             }),
+            local_timezone: true,
         }
     }
 
@@ -809,11 +841,32 @@ impl Builder {
         self
     }
 
+    #[inline]
+    /// Log with timestamp of local timezone
+    ///
+    /// Timezone is fixed after logger setup for the following reasons:
+    /// 1. `time` v0.3 currently do not allow access to local offset for multithread process
+    /// in unix-like OS.
+    /// 1. timezone retrieval from OS is quite slow (around several microsecond) compare with
+    /// utc timestamp retrieval (around tens of nanoseconds)
+    pub fn local_timezone(mut self) -> Builder {
+        self.local_timezone = true;
+        self
+    }
+
+    #[inline]
+    /// Log with timestamp of UTC timezone
+    pub fn utc(mut self) -> Builder {
+        self.local_timezone = false;
+        self
+    }
+
     /// Finish building ftlog logger
     ///
     /// The call spawns a log thread to formatting log message into string,
     /// and write to output target.
     pub fn build(self) -> Result<Logger, IoError> {
+        let offset = self.local_timezone.then(|| local_timezone());
         let mut filters = self.filters;
         // sort filters' paths to ensure match for longest path
         filters.sort_by(|a, b| a.path.len().cmp(&b.path.len()));
@@ -869,6 +922,7 @@ impl Builder {
                                 root_level,
                                 &mut missed_log,
                                 &mut last_log,
+                                offset,
                             );
                         }
                         Ok(LoggerInput::Flush) => {
@@ -882,6 +936,7 @@ impl Builder {
                                         root_level,
                                         &mut missed_log,
                                         &mut last_log,
+                                        offset,
                                     )
                                 } else {
                                     break 'queue;
@@ -912,6 +967,7 @@ impl Builder {
                                         root_level,
                                         &mut missed_log,
                                         &mut last_log,
+                                        offset,
                                     )
                                 } else {
                                     break 'queue;
