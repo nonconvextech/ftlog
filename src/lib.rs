@@ -912,8 +912,9 @@ impl Builder {
                 let mut last_log = HashMap::default();
                 let mut missed_log = HashMap::default();
                 let mut last_flush = Instant::now();
+                let timeout = Duration::from_millis(200);
                 loop {
-                    match receiver.recv_timeout(Duration::from_millis(200)) {
+                    match receiver.recv_timeout(timeout) {
                         Ok(LoggerInput::LogMsg(log_msg)) => {
                             log_msg.write(
                                 &filters,
