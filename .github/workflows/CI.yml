@@ -92,6 +92,9 @@ jobs:
         with:
             toolchain: stable
 
+      - name: Check semver
+        uses: obi1kenobi/cargo-semver-checks-action@v1
+
       - name: login
         env:
           SUPER_SECRET: ${{ secrets.CARGO_TOKEN }}
