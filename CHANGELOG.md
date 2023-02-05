@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.5](https://github.com/nonconvextech/ftlog/compare/v0.2.4...v0.2.5) (2023-02-05)
+
+
+### Features
+
+* add `try_init(self)` for `ftlog::Builder` ([8a2e482](https://github.com/nonconvextech/ftlog/commit/8a2e48262fc8db410c2b9d501b46005967e40eb6))
+* add feature `tsc` to use TSC as clock source ([0e9947e](https://github.com/nonconvextech/ftlog/commit/0e9947e3de861bb8c95e344723f418ea30d24e50))
+* early stop when if msg in queue when flush ([32df7ec](https://github.com/nonconvextech/ftlog/commit/32df7ec25023fa79a0a9fd4aa80e16250de5af2e))
+* option to use utc timestamp for performance ([864c021](https://github.com/nonconvextech/ftlog/commit/864c02111747c1bb26e04706acc290807f3ca4a3))
+* timezone format to hour in log timestamp ([6b15626](https://github.com/nonconvextech/ftlog/commit/6b15626784bbc916d60b97ebf78b49506e86bf49))
+* write msg in queue and flush when quit ([359d787](https://github.com/nonconvextech/ftlog/commit/359d787bfd99a240632da34e2aa8c2c99056622a))
+
+
+### Bug Fixes
+
+* flush write all messages in receiver queue ([2bf6081](https://github.com/nonconvextech/ftlog/commit/2bf6081e45acdc2e41d2520912c2816c221b1e9d))
+* rotation can cause panic in windows ([d3dbf0d](https://github.com/nonconvextech/ftlog/commit/d3dbf0dc7845f3d9fba0bbdedf66e65f9b6a8e89))
+
 ### [0.2.4](https://github.com/nonconvextech/ftlog/compare/v0.2.3...v0.2.4) (2022-12-09)
 
 
