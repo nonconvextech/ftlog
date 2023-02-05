@@ -8,9 +8,6 @@
 普通的日志库受到磁盘io和系统pipe影响，单线程顺序写入单条速度大概要2500ns（SSD），如果碰到io抖动或者慢磁盘，日志会是低延时交易的主要瓶颈。
 本库先把日志send到channel，再启动后台单独线程recv并且磁盘写入，测试速度在300ns左右。
 
-**注意**: 需要使用nightly rust
-
-
 ## 用法
 
 在 `Cargo.toml` 中加入引用
@@ -36,8 +33,6 @@ info!("Hello world!");
 warn!("Hello world!");
 error!("Hello world!");
 
-// 在main最后加入flush，否则在程序结束时未写入的日志会丢失：
-ftlog::logger().flush();
 ```
 
 以下是一个功能更丰富的例子：
@@ -171,18 +166,25 @@ let logger = ftlog::builder()
     .unwrap();
 logger.init().unwrap();
 ```
+## 可选功能
+- **tsc**
+  使用TSC寄存器作为时钟源，实现同等时间精度下更快地获取时间戳。
+
+  注意，启用TSC必须满足以下条件：
+  1. CPU不能变频
+  1. 必须在 **x86架构** 的CPU上，目前只支持 **Linux** 系统。否则会启用备用方案，牺牲时间精度换取速度
 
 ## 性能评测
 
 > Rust：1.67.0-nightly
 
-|                                                   |  消息类型 | Apple M1 Pro, 3.2GHz  | AMD EPYC 7T83, 3.2GHz |
-| ------------------------------------------------- | ------------- | --------------------- | --------------------- |
-| `ftlog`                                           | 静态字符串 |   89 ns/iter (±22)    | 197 ns/iter (±232)    |
-| `ftlog`                                           | 带有 i32      |   123 ns/iter (±31)   | 263 ns/iter (±124)    |
-| `env_logger` <br/> 输出到文件                 | 静态字符串  | 1,674 ns/iter (±123)  | 1,142 ns/iter (±56)   |
-| `env_logger` <br/> 输出到文件                 | 带有 i32      | 1,681 ns/iter (±59)   | 1,179 ns/iter (±46)   |
-| `env_logger` <br/> 输出到带缓冲的文件 | 静态字符串 | 279 ns/iter (±43)     | 550 ns/iter (±96)     |
-| `env_logger` <br/> 输出到带缓冲的文件| 带有 i32      | 278 ns/iter (±53)     | 565 ns/iter (±95)     |
+//! |                                                   |  message type | Apple M1 Pro, 3.2GHz  | AMD EPYC 7T83, 3.2GHz |
+//! | ------------------------------------------------- | ------------- | --------------------- | --------------------- |
+//! | `ftlog`                                           | static string |   75 ns/iter    | 385 ns/iter    |
+//! | `ftlog`                                           | with i32      |   106 ns/iter   | 491 ns/iter    |
+//! | `env_logger` <br/> output to file                 | static string | 1,674 ns/iter  | 1,142 ns/iter   |
+//! | `env_logger` <br/> output to file                 | with i32      | 1,681 ns/iter   | 1,179 ns/iter   |
+//! | `env_logger` <br/> output to file with `BufWriter`| static string | 279 ns/iter     | 550 ns/iter     |
+//! | `env_logger` <br/> output to file with `BufWriter`| with i32      | 278 ns/iter     | 565 ns/iter     |
 
 License: MIT OR Apache-2.0

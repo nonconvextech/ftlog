@@ -208,6 +208,13 @@
 //!   The current feature further requires that the build target **MUST BE LINUX**. Otherwise it will fall back to
 //!   a fast but less accurate implementation.
 //!   
+//! # Timezone
+//!
+//! For performance, timezone is detected once at logger buildup, and use it later in every
+//! log message. This is partly due to timezone detetion is expensive, and partly to the unsafe
+//! nature of underlying system call in multi-thread program in Linux.
+//!
+//! It's also recommended to use UTC instead to further avoid timestamp convertion to timezone for every log message.
 //!
 //! # Performance
 //!
@@ -215,12 +222,12 @@
 //!
 //! |                                                   |  message type | Apple M1 Pro, 3.2GHz  | AMD EPYC 7T83, 3.2GHz |
 //! | ------------------------------------------------- | ------------- | --------------------- | --------------------- |
-//! | `ftlog`                                           | static string |   89 ns/iter (±22)    | 197 ns/iter (±232)    |
-//! | `ftlog`                                           | with i32      |   123 ns/iter (±31)   | 263 ns/iter (±124)    |
-//! | `env_logger` <br/> output to file                 | static string | 1,674 ns/iter (±123)  | 1,142 ns/iter (±56)   |
-//! | `env_logger` <br/> output to file                 | with i32      | 1,681 ns/iter (±59)   | 1,179 ns/iter (±46)   |
-//! | `env_logger` <br/> output to file with `BufWriter`| static string | 279 ns/iter (±43)     | 550 ns/iter (±96)     |
-//! | `env_logger` <br/> output to file with `BufWriter`| with i32      | 278 ns/iter (±53)     | 565 ns/iter (±95)     |
+//! | `ftlog`                                           | static string |   75 ns/iter    | 385 ns/iter    |
+//! | `ftlog`                                           | with i32      |   106 ns/iter   | 491 ns/iter    |
+//! | `env_logger` <br/> output to file                 | static string | 1,674 ns/iter  | 1,142 ns/iter   |
+//! | `env_logger` <br/> output to file                 | with i32      | 1,681 ns/iter   | 1,179 ns/iter   |
+//! | `env_logger` <br/> output to file with `BufWriter`| static string | 279 ns/iter     | 550 ns/iter     |
+//! | `env_logger` <br/> output to file with `BufWriter`| with i32      | 278 ns/iter     | 565 ns/iter     |
 
 use arc_swap::ArcSwap;
 pub use log::{

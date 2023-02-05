@@ -32,17 +32,13 @@ use ftlog::{debug, trace};
 use log::{error, info, warn};
 
 // minimal configuration with default setting
-ftlog::builder().build().unwrap().init().unwrap();
+ftlog::builder().try_init().unwrap();
 
 trace!("Hello world!");
 debug!("Hello world!");
 info!("Hello world!");
 warn!("Hello world!");
 error!("Hello world!");
-
-// when main thread is done, logging thread may be busy printing messages
-// wait for log output to flush, otherwise messages in memory yet might lost
-ftlog::logger().flush();
 ```
 
 A more complicated but feature rich usage:
@@ -71,15 +67,16 @@ let logger = ftlog::builder()
         Period::Day,
         Duration::days(7),
     ))
+    // Do not convert to local timezone for timestamp, this does not affect worker thread,
+    // but can boost log thread performance (higher throughput).
+    .utc()
     // level filter for root appender
     .root_log_level(LevelFilter::Warn)
     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
-    .build()
-    .expect("logger build failed");
-// init global logger
-logger.init().expect("set logger failed");
+    .try_init()
+    .expect("logger build or set failed");
 ```
 
 See `./examples` for more (e.g. custom format).
@@ -200,17 +197,37 @@ let logger = ftlog::builder()
 logger.init().unwrap();
 ```
 
+## Features
+- **tsc**
+  Use [TSC](https://en.wikipedia.org/wiki/Time_Stamp_Counter) for clock source for higher performance without
+  accuracy loss.
+
+  TSC offers the most accurate and cheapest way to access current time under certain condition:
+  1. the CPU frequency must be constant
+  1. must with CPU of x86 architecture, since TSC is an x86 specific register.
+
+  The current feature further requires that the build target **MUST BE LINUX**. Otherwise it will fall back to
+  a fast but less accurate implementation.
+
+## Timezone
+
+For performance, timezone is detected once at logger buildup, and use it later in every
+log message. This is partly due to timezone detetion is expensive, and partly to the unsafe
+nature of underlying system call in multi-thread program in Linux.
+
+It's also recommended to use UTC instead to further avoid timestamp convertion to timezone for every log message.
+
 ## Performance
 
 > Rust：1.67.0-nightly
 
 |                                                   |  message type | Apple M1 Pro, 3.2GHz  | AMD EPYC 7T83, 3.2GHz |
 | ------------------------------------------------- | ------------- | --------------------- | --------------------- |
-| `ftlog`                                           | static string |   89 ns/iter (±22)    | 197 ns/iter (±232)    |
-| `ftlog`                                           | with i32      |   123 ns/iter (±31)   | 263 ns/iter (±124)    |
-| `env_logger` <br/> output to file                 | static string | 1,674 ns/iter (±123)  | 1,142 ns/iter (±56)   |
-| `env_logger` <br/> output to file                 | with i32      | 1,681 ns/iter (±59)   | 1,179 ns/iter (±46)   |
-| `env_logger` <br/> output to file with `BufWriter`| static string | 279 ns/iter (±43)     | 550 ns/iter (±96)     |
-| `env_logger` <br/> output to file with `BufWriter`| with i32      | 278 ns/iter (±53)     | 565 ns/iter (±95)     |
+| `ftlog`                                           | static string |   75 ns/iter    | 385 ns/iter    |
+| `ftlog`                                           | with i32      |   106 ns/iter   | 491 ns/iter    |
+| `env_logger` <br/> output to file                 | static string | 1,674 ns/iter  | 1,142 ns/iter   |
+| `env_logger` <br/> output to file                 | with i32      | 1,681 ns/iter   | 1,179 ns/iter   |
+| `env_logger` <br/> output to file with `BufWriter`| static string | 279 ns/iter     | 550 ns/iter     |
+| `env_logger` <br/> output to file with `BufWriter`| with i32      | 278 ns/iter     | 565 ns/iter     |
 
 License: MIT OR Apache-2.0
