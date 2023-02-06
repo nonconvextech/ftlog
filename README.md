@@ -1,6 +1,6 @@
 # ftlog
 
-[![Build Status](https://github.com/nonconvextech/ftlog/workflows/CI%20%28Linux%29/badge.svg?branch=main)](https://github.com/nonconvextech/ftlog/actions)
+[![Build Status](https://github.com/nonconvextech/ftlog/workflows/ftlog/badge.svg?branch=main)](https://github.com/nonconvextech/ftlog/actions)
 ![License](https://img.shields.io/crates/l/ftlog.svg)
 [![Latest Version](https://img.shields.io/crates/v/ftlog.svg)](https://crates.io/crates/ftlog)
 [![ftlog](https://docs.rs/ftlog/badge.svg)](https://docs.rs/ftlog)
