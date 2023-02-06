@@ -45,6 +45,6 @@ fn main() {
         ftlog::info!("ftlog: {}", 0i32);
     });
     run!("limit with i32", {
-        ftlog::info!(limit=3; "ftlog message");
+        ftlog::info!(limit=3; "ftlog: {}", 0i32);
     });
 }
