@@ -125,7 +125,7 @@ impl FileAppender {
 
     fn file<T: AsRef<Path>>(path: T, period: Period) -> PathBuf {
         let p = path.as_ref();
-        let dt = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+        let dt = OffsetDateTime::now_utc().to_offset(local_timezone());
         let ts = match period {
             Period::Year => format!("{}", dt.year()),
             Period::Month => format!("{}{:02}", dt.year(), dt.month() as u8),
