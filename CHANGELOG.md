@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.6](https://github.com/nonconvextech/ftlog/compare/v0.2.5...v0.2.6) (2023-02-07)
+
+
+### Bug Fixes
+
+* file rotation at local timezone ([ea40194](https://github.com/nonconvextech/ftlog/commit/ea40194255f0a2a209e00d14bdc70b51ce6a0510))
+
 ### [0.2.5](https://github.com/nonconvextech/ftlog/compare/v0.2.4...v0.2.5) (2023-02-05)
 
 
