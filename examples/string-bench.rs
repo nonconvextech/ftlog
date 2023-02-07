@@ -1,3 +1,4 @@
+use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use ftlog::{FtLogFormat, Record};
@@ -12,7 +13,7 @@ macro_rules! run {
         loop {
             let now = Instant::now();
             for _ in 1..=MESSAGES {
-                $code
+                black_box($code)
             }
             let elapsed = now.elapsed();
             ftlog::logger().flush();

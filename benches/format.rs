@@ -1,5 +1,7 @@
 #![feature(test)]
 extern crate test;
+use std::hint::black_box;
+
 use ftlog::{FtLogFormat, FtLogFormatter, Record};
 
 #[bench]
@@ -10,7 +12,7 @@ fn format_value(b: &mut test::Bencher) {
         .line(Some(29))
         .build();
     b.iter(|| {
-        FtLogFormatter.msg(&record);
+        black_box(FtLogFormatter.msg(&record));
     });
 }
 
@@ -32,7 +34,8 @@ fn format_string(b: &mut test::Bencher) {
         .file_static(Some("benches/string-format.rs"))
         .line(Some(29))
         .build();
+
     b.iter(|| {
-        format(&record);
+        black_box(format(&record));
     });
 }

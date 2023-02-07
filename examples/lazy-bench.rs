@@ -1,3 +1,4 @@
+use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 const MIN_BENCH_TIME: u64 = 2000;
@@ -10,7 +11,7 @@ macro_rules! run {
         loop {
             let now = Instant::now();
             for _ in 1..=MESSAGES {
-                $code
+                black_box($code)
             }
             let elapsed = now.elapsed();
             ftlog::logger().flush();
