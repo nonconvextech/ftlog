@@ -204,10 +204,11 @@ logger.init().unwrap();
 
   TSC offers the most accurate and cheapest way to access current time under certain condition:
   1. the CPU frequency must be constant
-  1. must with CPU of x86 architecture, since TSC is an x86 specific register.
+  1. must with CPU of x86/x86_64 architecture, since TSC is an x86/x86_64 specific register.
+  1. never suspend
 
   The current feature further requires that the build target **MUST BE LINUX**. Otherwise it will fall back to
-  a fast but less accurate implementation.
+  a fast but much less accurate implementation.
 
 ## Timezone
 
