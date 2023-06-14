@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.7](https://github.com/nonconvextech/ftlog/compare/v0.2.6...v0.2.7) (2023-06-14)
+
+
+### Features
+
+* use `time` v0.3 format mechanism ([eb4c9d4](https://github.com/nonconvextech/ftlog/commit/eb4c9d42082c93752cc812b20960ff966fec1573))
+
 ### [0.2.6](https://github.com/nonconvextech/ftlog/compare/v0.2.5...v0.2.6) (2023-02-07)
 
 
