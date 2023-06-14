@@ -97,7 +97,27 @@
 //!
 //! The number **2** above indicates how many log messages were discarded.
 //! Only shown if the frequency of logging for a single log call is limited (e.g.
-//! `log::info!(limit=3000;"msg")`).
+//! `log::info!(limit=3000i64;"msg")`).
+//!
+//! ## Custom timestamp format
+//!
+//! `ftlog` relies on the `time` crate for the formatting of timestamp. To use custom time format,
+//! first construct a valid time format description,
+//! and then pass it to ftlog builder by `ftlog::time_format(&mut self)`.
+//!
+//! In case an error occurs when formatting timestamp, `ftlog` will fallback to RFC3339 time format.
+//!
+//! ### Example
+//! ```rust
+//! let format = time::format_description::parse_owned::<1>(
+//!         "[year]/[month]/[day] [hour]:[minute]:[second].[subsecond digits:6]",
+//!     )
+//!     .unwrap();
+//! ftlog::builder().time_format(format).try_init().unwrap();
+//! log::info!("Log with custom timestamp format");
+//! // Output:
+//! // 2023/06/14 11:13:26.160840 0ms INFO main [main.rs:3] Log with custom timestamp format
+//! ```
 //!
 //! ## Log with interval
 //!
@@ -114,7 +134,7 @@
 //!
 //! ```rust
 //! # use ftlog::info;
-//! info!(limit=3000; "limit running {}s !", 3);
+//! info!(limit=3000i64; "limit running {}s !", 3);
 //! ```
 //! The minimal interval of the the specific log call above is 3000ms.
 //!
@@ -234,6 +254,7 @@ use arc_swap::ArcSwap;
 pub use log::{
     debug, error, info, log, log_enabled, logger, trace, warn, Level, LevelFilter, Record,
 };
+use time::format_description::OwnedFormatItem;
 use time::{OffsetDateTime, UtcOffset};
 
 use std::borrow::Cow;
@@ -324,6 +345,7 @@ impl LogMsg {
         missed_log: &mut HashMap<u64, i64>,
         last_log: &mut HashMap<u64, Time>,
         offset: Option<UtcOffset>,
+        time_format: &time::format_description::OwnedFormatItem,
     ) {
         let now = now();
 
@@ -360,15 +382,12 @@ impl LogMsg {
                 .unwrap_or(utc_datetime);
 
             let s = format!(
-                "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {} {}\n",
-                offset_datetime.year(),
-                offset_datetime.month() as u8,
-                offset_datetime.day(),
-                offset_datetime.hour(),
-                offset_datetime.minute(),
-                offset_datetime.second(),
-                offset_datetime.millisecond(),
-                offset_datetime.offset().whole_hours(),
+                "{} {}ms {} {}\n",
+                offset_datetime
+                    .format(&time_format)
+                    .unwrap_or_else(|_| offset_datetime
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .unwrap()),
                 delay.as_millis(),
                 *missed_entry,
                 self.msg
@@ -384,15 +403,12 @@ impl LogMsg {
                 .map(|o| utc_datetime.to_offset(o))
                 .unwrap_or(utc_datetime);
             let s = format!(
-                "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}{:>+03} {}ms {}\n",
-                offset_datetime.year(),
-                offset_datetime.month() as u8,
-                offset_datetime.day(),
-                offset_datetime.hour(),
-                offset_datetime.minute(),
-                offset_datetime.second(),
-                offset_datetime.millisecond(),
-                offset_datetime.offset().whole_hours(),
+                "{} {}ms {}\n",
+                offset_datetime
+                    .format(&time_format)
+                    .unwrap_or_else(|_| offset_datetime
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .unwrap()),
                 delay.as_millis(),
                 self.msg
             );
@@ -688,6 +704,7 @@ struct BoundedChannelOption {
 ///
 pub struct Builder {
     format: Box<dyn FtLogFormat>,
+    time_format: Option<OwnedFormatItem>,
     level: Option<LevelFilter>,
     root_level: Option<LevelFilter>,
     root: Box<dyn Write + Send>,
@@ -733,6 +750,7 @@ impl Builder {
                 print: false,
             }),
             local_timezone: true,
+            time_format: None,
         }
     }
 
@@ -740,6 +758,13 @@ impl Builder {
     #[inline]
     pub fn format<F: FtLogFormat + 'static>(mut self, format: F) -> Builder {
         self.format = Box::new(format);
+        self
+    }
+
+    /// Set custom datetime formatter
+    #[inline]
+    pub fn time_format(mut self, format: OwnedFormatItem) -> Builder {
+        self.time_format = Some(format);
         self
     }
 
@@ -875,6 +900,12 @@ impl Builder {
     /// and write to output target.
     pub fn build(self) -> Result<Logger, IoError> {
         let offset = self.local_timezone.then(|| local_timezone());
+        let time_format = self.time_format.unwrap_or_else(|| {
+            time::format_description::parse_owned::<1>(
+                "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]+[offset_hour]",
+            )
+            .unwrap()
+        });
         let mut filters = self.filters;
         // sort filters' paths to ensure match for longest path
         filters.sort_by(|a, b| a.path.len().cmp(&b.path.len()));
@@ -932,6 +963,7 @@ impl Builder {
                                 &mut missed_log,
                                 &mut last_log,
                                 offset,
+                                &time_format,
                             );
                         }
                         Ok(LoggerInput::Flush) => {
@@ -946,6 +978,7 @@ impl Builder {
                                         &mut missed_log,
                                         &mut last_log,
                                         offset,
+                                        &time_format,
                                     )
                                 } else {
                                     break 'queue;
@@ -977,6 +1010,7 @@ impl Builder {
                                         &mut missed_log,
                                         &mut last_log,
                                         offset,
+                                        &time_format,
                                     )
                                 } else {
                                     break 'queue;

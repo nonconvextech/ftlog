@@ -99,7 +99,27 @@ messages.
 
 The number **2** above indicates how many log messages were discarded.
 Only shown if the frequency of logging for a single log call is limited (e.g.
-`log::info!(limit=3000;"msg")`).
+`log::info!(limit=3000i64;"msg")`).
+
+### Custom timestamp format
+
+`ftlog` relies on the `time` crate for the formatting of timestamp. To use custom time format,
+first construct a valid time format description,
+and then pass it to ftlog builder by `ftlog::time_format(&mut self)`.
+
+In case an error occurs when formatting timestamp, `ftlog` will fallback to RFC3339 time format.
+
+#### Example
+```rust
+let format = time::format_description::parse_owned::<1>(
+        "[year]/[month]/[day] [hour]:[minute]:[second].[subsecond digits:6]",
+    )
+    .unwrap();
+ftlog::builder().time_format(format).try_init().unwrap();
+log::info!("Log with custom timestamp format");
+// Output:
+// 2023/06/14 11:13:26.160840 0ms INFO main [main.rs:3] Log with custom timestamp format
+```
 
 ### Log with interval
 
@@ -115,7 +135,7 @@ combination of (module name, file name, code line).
 #### Example
 
 ```rust
-info!(limit=3000; "limit running {}s !", 3);
+info!(limit=3000i64; "limit running {}s !", 3);
 ```
 The minimal interval of the the specific log call above is 3000ms.
 

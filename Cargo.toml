@@ -15,7 +15,7 @@ keywords = [ "logging" ]
 exclude = [ ".standard-version", ".versionrc", ".github" ]
 
 [features]
-default = [ ]
+default = [  ]
 tsc = [ "minstant", "once_cell" ]
 
 [dependencies]
@@ -25,7 +25,7 @@ arc-swap = "1"
 
   [dependencies.time]
   version = "0.3"
-  features = [ "local-offset" ]
+  features = [ "local-offset", "formatting" ]
 
   [dependencies.minstant]
   version = "0.1"
