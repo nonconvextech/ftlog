@@ -37,6 +37,10 @@
 //! info!("Hello world!");
 //! warn!("Hello world!");
 //! error!("Hello world!");
+//!
+//! // When main thread is done, ftlog worker thread may be busy printing messages.
+//! // Manually flush log output, otherwise messages in memory yet might lost
+//! log::logger().flush();
 //! ```
 //!
 //! A more complicated but feature rich usage:

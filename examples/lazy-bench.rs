@@ -48,4 +48,5 @@ fn main() {
     run!("limit with i32", {
         ftlog::info!(limit=3i64; "ftlog: {}", 0i32);
     });
+    log::logger().flush();
 }
