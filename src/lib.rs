@@ -422,7 +422,6 @@ impl LogMsg {
 enum LoggerInput {
     LogMsg(LogMsg),
     Flush,
-    Quit,
 }
 
 #[derive(Debug)]
@@ -557,7 +556,6 @@ pub struct Logger {
     level: LevelFilter,
     queue: Sender<LoggerInput>,
     notification: Receiver<LoggerOutput>,
-    worker_thread: Option<std::thread::JoinHandle<()>>,
     block: bool,
     discard_state: Option<DiscardState>,
     stopped: AtomicBool,
@@ -640,21 +638,6 @@ impl Log for Logger {
         self.notification
             .recv()
             .expect("logger notification closed, this is a bug");
-    }
-}
-
-impl Drop for Logger {
-    fn drop(&mut self) {
-        self.queue
-            .send(LoggerInput::Quit)
-            .expect("logger queue closed before joining logger thread, this is a bug");
-        let join_handle = self
-            .worker_thread
-            .take()
-            .expect("logger thread empty when dropping logger, this is a bug");
-        join_handle
-            .join()
-            .expect("failed to join logger thread when dropping logger, this is a bug");
     }
 }
 
@@ -930,7 +913,7 @@ impl Builder {
             Some(option) => bounded(option.size),
         };
         let (notification_sender, notification_receiver) = bounded(1);
-        let worker_thread = std::thread::Builder::new()
+        std::thread::Builder::new()
             .name("logger".to_string())
             .spawn(move || {
                 let mut appenders = self.appenders;
@@ -998,29 +981,6 @@ impl Builder {
                                     .expect("logger notification failed");
                             }
                         }
-                        Ok(LoggerInput::Quit) => {
-                            let max = receiver.len();
-                            'queue: for _ in 1..=max {
-                                if let Ok(LoggerInput::LogMsg(msg)) = receiver.try_recv() {
-                                    msg.write(
-                                        &filters,
-                                        &mut appenders,
-                                        &mut root,
-                                        root_level,
-                                        &mut missed_log,
-                                        &mut last_log,
-                                        offset,
-                                        &time_format,
-                                    )
-                                } else {
-                                    break 'queue;
-                                }
-                            }
-                            appenders.values_mut().chain([&mut root]).for_each(|w| {
-                                let _ = w.flush();
-                            });
-                            break;
-                        }
                         Err(RecvTimeoutError::Timeout) => {
                             if last_flush.elapsed() > Duration::from_millis(1000) {
                                 let flush_errors = appenders
@@ -1057,7 +1017,6 @@ impl Builder {
             level: global_level,
             queue: sync_sender,
             notification: notification_receiver,
-            worker_thread: Some(worker_thread),
             block,
             discard_state: if block || !print {
                 None
