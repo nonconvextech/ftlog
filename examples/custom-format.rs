@@ -7,7 +7,7 @@ use ftlog::{
 use log::{Level, LevelFilter, Record};
 use time::Duration;
 fn init() {
-    // Custom log style. Datetime format is fixed for performance
+    // Custom log style.
 
     // A formatter defines how to build a message.
     // Since Formatting message into string can slow down the log macro call,
@@ -51,9 +51,15 @@ fn init() {
         }
     }
 
+    let time_format = time::format_description::parse_owned::<1>(
+        "[year]/[month]/[day] [hour]:[minute]:[second].[subsecond digits:6]",
+    )
+    .unwrap();
     ftlog::Builder::new()
         // use our own format
         .format(MyFormatter)
+        // use our own time format
+        .time_format(time_format)
         // global max log level
         .max_log_level(LevelFilter::Info)
         // define root appender, pass None would write to stderr
@@ -92,23 +98,23 @@ fn main() {
 /*
 Output:
 
-2022-11-11 13:53:13.933+08 0ms logger@ftlog||src/lib.rs:439[WARN] Logs with level more verbose than INFO will be ignored in `ftlog`
-2022-11-11 13:53:13.933+08 0ms main@complex||examples/complex.rs:83[INFO] Hello, world!
-2022-11-11 13:53:13.934+08 1ms main@complex||examples/complex.rs:85[INFO] running 0!
-2022-11-11 13:53:13.934+08 3ms 0 main@complex||examples/complex.rs:86[INFO] limit running0 !
-2022-11-11 13:53:13.934+08 3ms logger@ftlog::appender::file||src/appender/file.rs:255[INFO] Log file deleted: current-20221111T1352.log
-2022-11-11 13:53:14.939+08 0ms main@complex||examples/complex.rs:85[INFO] running 1!
-2022-11-11 13:53:15.939+08 0ms main@complex||examples/complex.rs:85[INFO] running 2!
-2022-11-11 13:53:16.943+08 0ms main@complex||examples/complex.rs:85[INFO] running 3!
-2022-11-11 13:53:16.943+08 0ms 2 main@complex||examples/complex.rs:86[INFO] limit running3 !
-2022-11-11 13:53:17.945+08 0ms main@complex||examples/complex.rs:85[INFO] running 4!
-2022-11-11 13:53:18.946+08 0ms main@complex||examples/complex.rs:85[INFO] running 5!
-2022-11-11 13:53:19.951+08 0ms main@complex||examples/complex.rs:85[INFO] running 6!
-2022-11-11 13:53:19.951+08 0ms 2 main@complex||examples/complex.rs:86[INFO] limit running6 !
-2022-11-11 13:53:20.956+08 0ms main@complex||examples/complex.rs:85[INFO] running 7!
-2022-11-11 13:53:21.961+08 0ms main@complex||examples/complex.rs:85[INFO] running 8!
-2022-11-11 13:53:22.966+08 0ms main@complex||examples/complex.rs:85[INFO] running 9!
-2022-11-11 13:53:22.966+08 4ms 2 main@complex||examples/complex.rs:86[INFO] limit running9 !
+2022/11/11 13:53:13.933123 0ms logger@ftlog||src/lib.rs:439[WARN] Logs with level more verbose than INFO will be ignored in `ftlog`
+2022/11/11 13:53:13.933123 0ms main@complex||examples/complex.rs:83[INFO] Hello, world!
+2022/11/11 13:53:13.934123 1ms main@complex||examples/complex.rs:85[INFO] running 0!
+2022/11/11 13:53:13.934123 3ms 0 main@complex||examples/complex.rs:86[INFO] limit running0 !
+2022/11/11 13:53:13.934123 3ms logger@ftlog::appender::file||src/appender/file.rs:255[INFO] Log file deleted: current-20221111T1352.log
+2022/11/11 13:53:14.939123 0ms main@complex||examples/complex.rs:85[INFO] running 1!
+2022/11/11 13:53:15.939123 0ms main@complex||examples/complex.rs:85[INFO] running 2!
+2022/11/11 13:53:16.943123 0ms main@complex||examples/complex.rs:85[INFO] running 3!
+2022/11/11 13:53:16.943123 0ms 2 main@complex||examples/complex.rs:86[INFO] limit running3 !
+2022/11/11 13:53:17.945123 0ms main@complex||examples/complex.rs:85[INFO] running 4!
+2022/11/11 13:53:18.946123 0ms main@complex||examples/complex.rs:85[INFO] running 5!
+2022/11/11 13:53:19.951123 0ms main@complex||examples/complex.rs:85[INFO] running 6!
+2022/11/11 13:53:19.951123 0ms 2 main@complex||examples/complex.rs:86[INFO] limit running6 !
+2022/11/11 13:53:20.956123 0ms main@complex||examples/complex.rs:85[INFO] running 7!
+2022/11/11 13:53:21.961123 0ms main@complex||examples/complex.rs:85[INFO] running 8!
+2022/11/11 13:53:22.966123 0ms main@complex||examples/complex.rs:85[INFO] running 9!
+2022/11/11 13:53:22.966123 4ms 2 main@complex||examples/complex.rs:86[INFO] limit running9 !
 
 
 Default style example:

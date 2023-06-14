@@ -51,11 +51,17 @@
 //!     FtLogFormatter, LevelFilter,
 //! };
 //!
+//! let time_format = time::format_description::parse_owned::<1>(
+//! "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:6]",
+//! )
+//! .unwrap();
 //! // configurate logger
 //! let logger = ftlog::builder()
 //!     // global max log level
 //!     .max_log_level(LevelFilter::Info)
-//!     // global log formatter, timestamp is fixed for performance
+//!     // custom timestamp format
+//!     .time_format(time_format)
+//!     // set global log formatter
 //!     .format(FtLogFormatter)
 //!     // use bounded channel to avoid large memory comsumption when overwhelmed with logs
 //!     // Set `false` to tell ftlog to discard excessive logs.
@@ -84,8 +90,6 @@
 //! See `./examples` for more (e.g. custom format).
 //!
 //! ## Default Log Format
-//!
-//! The datetime format is fixed for performance reasons.
 //!
 //! > 2022-04-08 19:20:48.190+08 **298ms** INFO main [src/ftlog.rs:14] My log
 //! > message
