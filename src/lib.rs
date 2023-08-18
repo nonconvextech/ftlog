@@ -364,8 +364,8 @@ impl LogMsg {
         appenders: &mut HashMap<&'static str, Box<dyn Write + Send>>,
         root: &mut Box<dyn Write + Send>,
         root_level: LevelFilter,
-        missed_log: &mut HashMap<u64, i64>,
-        last_log: &mut HashMap<u64, Time>,
+        missed_log: &mut HashMap<u64, i64, nohash_hasher::BuildNoHashHasher<u64>>,
+        last_log: &mut HashMap<u64, Time, nohash_hasher::BuildNoHashHasher<u64>>,
         offset: Option<UtcOffset>,
         time_format: &time::format_description::OwnedFormatItem,
     ) {
