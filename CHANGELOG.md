@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.8](https://github.com/nonconvextech/ftlog/compare/v0.2.7...v0.2.8) (2023-08-18)
+
+
+### Features
+
+* allow randomly drop log message ([61ceac2](https://github.com/nonconvextech/ftlog/commit/61ceac22d05b1c80b885a1fe6e11292432854e75))
+
 ### [0.2.7](https://github.com/nonconvextech/ftlog/compare/v0.2.6...v0.2.7) (2023-06-14)
 
 
