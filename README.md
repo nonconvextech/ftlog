@@ -109,6 +109,20 @@ The number **2** above indicates how many log messages were discarded.
 Only shown if the frequency of logging for a single log call is limited (e.g.
 `log::info!(limit=3000i64;"msg")`).
 
+### Randomly drop log
+
+Use `random_drop` to specify the probability of randomly discarding logs.
+No message is dropped by default.
+
+```rust
+log::info!(random_drop=0.1f64;"Random log 10% of log calls");
+```
+
+This can be helpful when formatting log message into string is too costly,
+
+When both `random_drop` and `limit` is specified,
+ftlog will limit logs after messages are randomly dropped.
+
 ### Custom timestamp format
 
 `ftlog` relies on the `time` crate for the formatting of timestamp. To use custom time format,

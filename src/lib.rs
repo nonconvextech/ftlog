@@ -107,6 +107,20 @@
 //! Only shown if the frequency of logging for a single log call is limited (e.g.
 //! `log::info!(limit=3000i64;"msg")`).
 //!
+//! ## Randomly drop log
+//!
+//! Use `random_drop` to specify the probability of randomly discarding logs.
+//! No message is dropped by default.
+//!
+//! ```rust
+//! log::info!(random_drop=0.1f64;"Random log 10% of log calls");
+//! ```
+//!
+//! This can be helpful when formatting log message into string is too costly,
+//!
+//! When both `random_drop` and `limit` is specified,
+//! ftlog will limit logs after messages are randomly dropped.
+//!
 //! ## Custom timestamp format
 //!
 //! `ftlog` relies on the `time` crate for the formatting of timestamp. To use custom time format,
@@ -585,18 +599,31 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record) {
+        let random_drop = record
+            .key_values()
+            .get(Key::from_str("random_drop"))
+            .and_then(|x| x.to_f64())
+            .unwrap_or(1.) as f32;
+        if random_drop < 1. && fastrand::f32() < random_drop {
+            return;
+        }
+
         let limit = record
             .key_values()
             .get(Key::from_str("limit"))
             .and_then(|x| x.to_u64())
             .unwrap_or(0) as u32;
+
         let msg = self.format.msg(record);
         let limit_key = if limit == 0 {
             0
         } else {
             let mut b = hashbrown::hash_map::DefaultHashBuilder::default().build_hasher();
-            record.module_path().unwrap_or("").as_bytes().hash(&mut b);
-            record.file().unwrap_or("").as_bytes().hash(&mut b);
+            if let Some(p) = record.module_path() {
+                p.as_bytes().hash(&mut b);
+            } else {
+                record.file().unwrap_or("").as_bytes().hash(&mut b);
+            }
             record.line().unwrap_or(0).hash(&mut b);
             b.finish()
         };
