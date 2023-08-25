@@ -111,11 +111,12 @@ Only shown if the frequency of logging for a single log call is limited (e.g.
 
 ### Randomly drop log
 
-Use `random_drop` to specify the probability of randomly discarding logs.
+Use `random_drop` or `drop` to specify the probability of randomly discarding logs.
 No message is dropped by default.
 
 ```rust
-log::info!(random_drop=0.1f64;"Random log 10% of log calls");
+log::info!(random_drop=0.1f32;"Random log 10% of log calls");
+log::info!(drop=0.9f32;"Random log 90% of log calls");
 ```
 
 This can be helpful when formatting log message into string is too costly,

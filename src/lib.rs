@@ -109,11 +109,12 @@
 //!
 //! ## Randomly drop log
 //!
-//! Use `random_drop` to specify the probability of randomly discarding logs.
+//! Use `random_drop` or `drop` to specify the probability of randomly discarding logs.
 //! No message is dropped by default.
 //!
 //! ```rust
-//! log::info!(random_drop=0.1f64;"Random log 10% of log calls");
+//! log::info!(random_drop=0.1f32;"Random log 10% of log calls");
+//! log::info!(drop=0.9f32;"Random log 90% of log calls");
 //! ```
 //!
 //! This can be helpful when formatting log message into string is too costly,
@@ -369,6 +370,11 @@ impl LogMsg {
         offset: Option<UtcOffset>,
         time_format: &time::format_description::OwnedFormatItem,
     ) {
+        let msg = self.msg.to_string();
+        if msg.is_empty() {
+            return;
+        }
+
         let now = now();
 
         let writer = if let Some(filter) = filters.iter().find(|x| self.target.starts_with(x.path))
@@ -412,7 +418,7 @@ impl LogMsg {
                         .unwrap()),
                 delay.as_millis(),
                 *missed_entry,
-                self.msg
+                msg
             );
             if let Err(e) = writer.write_all(s.as_bytes()) {
                 eprintln!("logger write message failed: {}", e);
@@ -432,7 +438,7 @@ impl LogMsg {
                         .format(&time::format_description::well_known::Rfc3339)
                         .unwrap()),
                 delay.as_millis(),
-                self.msg
+                msg
             );
             if let Err(e) = writer.write_all(s.as_bytes()) {
                 eprintln!("logger write message failed: {}", e);
@@ -602,6 +608,7 @@ impl Log for Logger {
         let random_drop = record
             .key_values()
             .get(Key::from_str("random_drop"))
+            .or_else(|| record.key_values().get(Key::from_str("drop")))
             .and_then(|x| x.to_f64())
             .unwrap_or(1.) as f32;
         if random_drop < 1. && fastrand::f32() < random_drop {
