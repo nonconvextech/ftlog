@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.9](https://github.com/nonconvextech/ftlog/compare/v0.2.8...v0.2.9) (2023-08-25)
+
+
+### Features
+
+* do not write empty log message ([1054305](https://github.com/nonconvextech/ftlog/commit/105430582be5562473fbf28ade0d0f75e57b7a77))
+
 ### [0.2.8](https://github.com/nonconvextech/ftlog/compare/v0.2.7...v0.2.8) (2023-08-18)
 
 
