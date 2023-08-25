@@ -121,6 +121,11 @@
 //!
 //! When both `random_drop` and `limit` is specified,
 //! ftlog will limit logs after messages are randomly dropped.
+//! ```rust
+//! log::info!(drop=0.99f32,limit=1000;
+//!     "Drop 99% messages. The survived 1% messages are limit to at least 1000ms between adjacent log messages output"
+//! );
+//! ```
 //!
 //! ## Custom timestamp format
 //!
