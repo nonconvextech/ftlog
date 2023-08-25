@@ -115,8 +115,8 @@ Use `random_drop` or `drop` to specify the probability of randomly discarding lo
 No message is dropped by default.
 
 ```rust
-log::info!(random_drop=0.1f32;"Random log 10% of log calls");
-log::info!(drop=0.9f32;"Random log 90% of log calls");
+log::info!(random_drop=0.1f32;"Random log 10% of log calls, keeps 90%");
+log::info!(drop=0.99f32;"Random drop 99% of log calls, keeps 1%");
 ```
 
 This can be helpful when formatting log message into string is too costly,
