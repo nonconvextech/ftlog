@@ -15,15 +15,19 @@ keywords = [ "logging" ]
 exclude = [ ".standard-version", ".versionrc", ".github" ]
 
 [features]
-default = [ ]
+default = [  ]
 tsc = [ "minstant", "once_cell" ]
+random_drop = [ "fastrand" ]
 
 [dependencies]
 crossbeam-channel = "0.5.0"
 hashbrown = "0.14"
 arc-swap = "1"
 nohash-hasher = "0.2"
-fastrand = "2"
+
+  [dependencies.fastrand]
+  version = "2"
+  optional = true
 
   [dependencies.time]
   version = "0.3"

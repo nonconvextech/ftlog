@@ -610,14 +610,17 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record) {
-        let random_drop = record
-            .key_values()
-            .get(Key::from_str("random_drop"))
-            .or_else(|| record.key_values().get(Key::from_str("drop")))
-            .and_then(|x| x.to_f64())
-            .unwrap_or(1.) as f32;
-        if random_drop < 1. && fastrand::f32() < random_drop {
-            return;
+        #[cfg(feature = "random_drop")]
+        {
+            let random_drop = record
+                .key_values()
+                .get(Key::from_str("random_drop"))
+                .or_else(|| record.key_values().get(Key::from_str("drop")))
+                .and_then(|x| x.to_f64())
+                .unwrap_or(1.) as f32;
+            if random_drop < 1. && fastrand::f32() < random_drop {
+                return;
+            }
         }
 
         let limit = record
