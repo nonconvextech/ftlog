@@ -4,9 +4,14 @@ use ftlog::{
 };
 use log::LevelFilter;
 use time::Duration;
+
 fn init() {
     // Rotate every day, clean stale logs that were modified 7 days ago on each rotation
-    let writer = FileAppender::rotate_with_expire("./current.log", Period::Day, Duration::weeks(1));
+    let writer = FileAppender::builder()
+        .path("./current.log")
+        .rotate(Period::Day)
+        .expire(Duration::weeks(1))
+        .build();
     ftlog::Builder::new()
         // global max log level
         .max_log_level(LevelFilter::Info)

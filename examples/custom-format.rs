@@ -63,11 +63,13 @@ fn init() {
         // global max log level
         .max_log_level(LevelFilter::Info)
         // define root appender, pass None would write to stderr
-        .root(FileAppender::rotate_with_expire(
-            "./current.log",
-            Period::Day,
-            Duration::days(7),
-        ))
+        .root(
+            FileAppender::builder()
+                .path("./current.log")
+                .rotate(Period::Day)
+                .expire(Duration::days(7))
+                .build(),
+        )
         // ---------- configure additional filter ----------
         // write to "ftlog-appender" appender, with different level filter
         .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
