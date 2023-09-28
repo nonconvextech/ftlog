@@ -765,10 +765,16 @@ struct Directive {
     level: Option<LevelFilter>,
     appender: Option<&'static str>,
 }
+/// timezone for log
 pub enum LogTimezone {
+    /// local timezone
+    ///
+    /// Only *unix OS is supported for now
     Local,
+    /// UTC timezone
     Utc,
-    Fixed(time::UtcOffset),
+    /// fixed timezone
+    Fixed(UtcOffset),
 }
 
 impl Builder {
@@ -947,7 +953,7 @@ impl Builder {
     }
 
     #[inline]
-    /// Log with timestamp of fixed timezone
+    /// Specify the timezone of log messages
     pub fn timezone(mut self, timezone: LogTimezone) -> Builder {
         self.timezone = timezone;
         self
