@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.10](https://github.com/nonconvextech/ftlog/compare/v0.2.9...v0.2.10) (2023-09-28)
+
+
+### Features
+
+* `FileAppender` builder, and timezone support ([792d6bc](https://github.com/nonconvextech/ftlog/commit/792d6bc57467e4f0dd8791df464ac9fbf03d6e51))
+* add feature gate `random_drop` ([5c6de2d](https://github.com/nonconvextech/ftlog/commit/5c6de2d4d83870e6b99aa11e758fd979a8fc9e39))
+* simultaneous multi destination helper ([5ec6e4c](https://github.com/nonconvextech/ftlog/commit/5ec6e4cff499a0641faad08caccd14693a3ab7da))
+
 ### [0.2.9](https://github.com/nonconvextech/ftlog/compare/v0.2.8...v0.2.9) (2023-08-25)
 
 
