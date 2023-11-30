@@ -32,17 +32,16 @@ use ftlog::{debug, trace};
 use log::{error, info, warn};
 
 // minimal configuration with default setting
-ftlog::builder().try_init().unwrap();
+
+// When drops, the guard calls and waits `flush` to logger.
+// With guard that share the lifetime of `main` fn, there is no need to manually call flush at the end of `main` fn.
+let _guard = ftlog::builder().try_init().unwrap();
 
 trace!("Hello world!");
 debug!("Hello world!");
 info!("Hello world!");
 warn!("Hello world!");
 error!("Hello world!");
-
-// When main thread is done, ftlog worker thread may be busy printing messages.
-// Manually flush log output, otherwise messages in memory yet might lost
-log::logger().flush();
 ```
 
 A more complicated but feature rich usage:
@@ -58,7 +57,7 @@ let time_format = time::format_description::parse_owned::<1>(
 )
 .unwrap();
 // configurate logger
-let logger = ftlog::builder()
+let _guard = ftlog::builder()
     // global max log level
     .max_log_level(LevelFilter::Info)
     // custom timestamp format
@@ -145,7 +144,7 @@ let format = time::format_description::parse_owned::<1>(
     "[year]/[month]/[day] [hour]:[minute]:[second].[subsecond digits:6]",
 )
 .unwrap();
-ftlog::builder().time_format(format).try_init().unwrap();
+let _guard = ftlog::builder().time_format(format).try_init().unwrap();
 log::info!("Log with custom timestamp format");
 // Output:
 // 2023/06/14 11:13:26.160840 0ms INFO main [main.rs:3] Log with custom timestamp format
@@ -200,7 +199,7 @@ let logger = ftlog::builder()
     )
     .build()
     .unwrap();
-logger.init().unwrap();
+let _guard = logger.init().unwrap();
 ```
 
 If the log file is configured to be split by minutes,
@@ -250,7 +249,7 @@ let logger = ftlog::builder()
     .root(appender)
     .build()
     .unwrap();
-logger.init().unwrap();
+let _guard = logger.init().unwrap();
 ```
 
 ## Features

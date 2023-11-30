@@ -2,11 +2,11 @@ use std::fmt::Display;
 
 use ftlog::{
     appender::{file::Period, FileAppender},
-    info, FtLogFormat,
+    info, FtLogFormat, LoggerGuard,
 };
 use log::{Level, LevelFilter, Record};
 use time::Duration;
-fn init() {
+fn init() -> LoggerGuard {
     // Custom log style.
 
     // A formatter defines how to build a message.
@@ -83,11 +83,11 @@ fn init() {
         // new appender, rotate to new file every Day
         .appender("ftlog", FileAppender::rotate("ftlog.log", Period::Day))
         .try_init()
-        .expect("logger build or set failed");
+        .expect("logger build or set failed")
 }
 
 fn main() {
-    init();
+    let _guard = init();
     info!("Hello, world!");
     for i in 0..120 {
         info!("running {}!", i);

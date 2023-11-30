@@ -1,11 +1,11 @@
 use ftlog::{
     appender::{file::Period, ChainAppenders, FileAppender},
-    info,
+    info, LoggerGuard,
 };
 use log::LevelFilter;
 use time::Duration;
 
-fn init() {
+fn init() -> LoggerGuard {
     // Rotate every day, clean stale logs that were modified 7 days ago on each rotation
     let writer = FileAppender::builder()
         .path("./current.log")
@@ -24,16 +24,15 @@ fn init() {
         .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
         .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
         .try_init()
-        .expect("logger build or set failed");
+        .expect("logger build or set failed")
 }
 
 fn main() {
-    init();
+    let _guard = init();
     info!("Hello, world!");
     for i in 0..300 {
         info!("running {}!", i);
         info!(limit=3000i64; "limit running{} !", i);
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    log::logger().flush();
 }

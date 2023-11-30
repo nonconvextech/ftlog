@@ -30,17 +30,16 @@
 //! use log::{error, info, warn};
 //!
 //! // minimal configuration with default setting
-//! ftlog::builder().try_init().unwrap();
+//!
+//! // When drops, the guard calls and waits `flush` to logger.
+//! // With guard that share the lifetime of `main` fn, there is no need to manually call flush at the end of `main` fn.
+//! let _guard = ftlog::builder().try_init().unwrap();
 //!
 //! trace!("Hello world!");
 //! debug!("Hello world!");
 //! info!("Hello world!");
 //! warn!("Hello world!");
 //! error!("Hello world!");
-//!
-//! // When main thread is done, ftlog worker thread may be busy printing messages.
-//! // Manually flush log output, otherwise messages in memory yet might lost
-//! log::logger().flush();
 //! ```
 //!
 //! A more complicated but feature rich usage:
@@ -56,7 +55,7 @@
 //! )
 //! .unwrap();
 //! // configurate logger
-//! let logger = ftlog::builder()
+//! let _guard = ftlog::builder()
 //!     // global max log level
 //!     .max_log_level(LevelFilter::Info)
 //!     // custom timestamp format
@@ -143,7 +142,7 @@
 //!     "[year]/[month]/[day] [hour]:[minute]:[second].[subsecond digits:6]",
 //! )
 //! .unwrap();
-//! ftlog::builder().time_format(format).try_init().unwrap();
+//! let _guard = ftlog::builder().time_format(format).try_init().unwrap();
 //! log::info!("Log with custom timestamp format");
 //! // Output:
 //! // 2023/06/14 11:13:26.160840 0ms INFO main [main.rs:3] Log with custom timestamp format
@@ -199,7 +198,7 @@
 //!     )
 //!     .build()
 //!     .unwrap();
-//! logger.init().unwrap();
+//! let _guard = logger.init().unwrap();
 //! ```
 //!
 //! If the log file is configured to be split by minutes,
@@ -249,7 +248,7 @@
 //!     .root(appender)
 //!     .build()
 //!     .unwrap();
-//! logger.init().unwrap();
+//! let _guard = logger.init().unwrap();
 //! ```
 //!
 //! # Features
@@ -591,6 +590,24 @@ struct DiscardState {
     count: AtomicUsize,
 }
 
+/// A guard that flushes logs associated to a Logger on a drop
+///
+/// With this guard, you can ensure all logs are written to destination
+/// when the application exits.
+pub struct LoggerGuard {
+    queue: Sender<LoggerInput>,
+    notification: Receiver<LoggerOutput>,
+}
+impl Drop for LoggerGuard {
+    fn drop(&mut self) {
+        self.queue
+            .send(LoggerInput::Flush)
+            .expect("logger queue closed when flushing, this is a bug");
+        self.notification
+            .recv()
+            .expect("logger notification closed, this is a bug");
+    }
+}
 /// ftlog global logger
 pub struct Logger {
     format: Box<dyn FtLogFormat>,
@@ -603,10 +620,15 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn init(self) -> Result<(), SetLoggerError> {
+    pub fn init(self) -> Result<LoggerGuard, SetLoggerError> {
+        let guard = LoggerGuard {
+            queue: self.queue.clone(),
+            notification: self.notification.clone(),
+        };
+
         set_max_level(self.level);
         let boxed = Box::new(self);
-        set_boxed_logger(boxed)
+        set_boxed_logger(boxed).map(|_| guard)
     }
 }
 
@@ -1117,7 +1139,7 @@ impl Builder {
     }
 
     /// try building and setting as global logger
-    pub fn try_init(self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn try_init(self) -> Result<LoggerGuard, Box<dyn std::error::Error>> {
         let logger = self.build()?;
         Ok(logger.init()?)
     }

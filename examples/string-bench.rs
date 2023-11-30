@@ -46,7 +46,7 @@ impl FtLogFormat for StringFormatter {
     }
 }
 fn main() {
-    ftlog::Builder::new()
+    let _guard = ftlog::Builder::new()
         .root(std::io::sink())
         .format(StringFormatter)
         .bounded(100_000, false)
@@ -64,5 +64,4 @@ fn main() {
     run!("limit with i32", {
         ftlog::info!(limit=3i64; "ftlog: {}", 0i32);
     });
-    log::logger().flush();
 }
