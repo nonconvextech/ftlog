@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.11](https://github.com/nonconvextech/ftlog/compare/v0.2.10...v0.2.11) (2023-11-30)
+
+
+### Features
+
+* add `LoggerGuard` to ensure flush when exits ([fdb302d](https://github.com/nonconvextech/ftlog/commit/fdb302db53acaee314ce778b5523284d69d3710c))
+
 ### [0.2.10](https://github.com/nonconvextech/ftlog/compare/v0.2.9...v0.2.10) (2023-09-28)
 
 

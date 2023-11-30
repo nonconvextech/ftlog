@@ -1,6 +1,6 @@
 [package]
 name = "ftlog"
-version = "0.2.10"
+version = "0.2.11"
 edition = "2021"
 authors = [ "Non-convex Tech" ]
 license = "MIT OR Apache-2.0"
