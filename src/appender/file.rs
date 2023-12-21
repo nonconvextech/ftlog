@@ -149,13 +149,22 @@ impl<
             (Some(period), Some(expire)) => {
                 let (start, wait) = FileAppender::until(period, &builder.timezone);
                 let path = FileAppender::file(&builder.path, period, &builder.timezone);
-                let file = BufWriter::new(
+                let mut file = BufWriter::new(
                     OpenOptions::new()
                         .create(true)
                         .append(true)
                         .open(&path)
                         .unwrap(),
                 );
+                let p = builder.path.clone();
+                let del_msg = clean_expire_log(p, period, expire);
+                if !del_msg.is_empty() {
+                    file.write_fmt(format_args!("Log file deleted: {}", del_msg))
+                        .expect(&format!(
+                            "Write msg to \"{}\" failed",
+                            path.to_string_lossy()
+                        ));
+                }
                 FileAppender {
                     file,
                     path: builder.path,
@@ -344,6 +353,60 @@ impl FileAppender {
     }
 }
 
+fn clean_expire_log(path: PathBuf, rotate_period: Period, keep_duration: Duration) -> String {
+    let dir = path.parent().unwrap().to_path_buf();
+    let dir = if dir.is_dir() {
+        dir
+    } else {
+        PathBuf::from(".")
+    };
+    let to_remove = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|f| f.ok())
+        .filter(|x| x.file_type().map(|x| x.is_file()).unwrap_or(false))
+        .filter(|x| {
+            let p = x.path();
+            let name = p.file_stem().unwrap().to_string_lossy();
+            if let Some((stem, time)) = name.rsplit_once("-") {
+                let check = |(ix, x): (usize, char)| match ix {
+                    8 => x == 'T',
+                    _ => x.is_digit(10),
+                };
+                let len = match rotate_period {
+                    Period::Minute => time.len() == 13,
+                    Period::Hour => time.len() == 11,
+                    Period::Day => time.len() == 8,
+                    Period::Month => time.len() == 6,
+                    Period::Year => time.len() == 4,
+                };
+                len && time.chars().enumerate().all(check)
+                    && path
+                        .file_stem()
+                        .map(|x| x.to_string_lossy() == stem)
+                        .unwrap_or(false)
+            } else {
+                false
+            }
+        })
+        .filter(|x| {
+            x.metadata()
+                .ok()
+                .and_then(|x| x.modified().ok())
+                .map(|time| {
+                    time.elapsed()
+                        .map(|elapsed| elapsed > keep_duration)
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false)
+        });
+
+    to_remove
+        .filter(|f| std::fs::remove_file(f.path()).is_ok())
+        .map(|x| x.file_name().to_string_lossy().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 impl Write for FileAppender {
     fn write(&mut self, record: &[u8]) -> std::io::Result<usize> {
         if let Some(Rotate {
@@ -360,60 +423,10 @@ impl Write for FileAppender {
                 // remove outdated log files
                 if let Some(keep_duration) = keep {
                     let keep_duration = keep_duration.clone();
-                    let dir = self.path.parent().unwrap().to_path_buf();
-                    let dir = if dir.is_dir() {
-                        dir
-                    } else {
-                        PathBuf::from(".")
-                    };
                     let path = self.path.clone();
                     let period = period.clone();
                     std::thread::spawn(move || {
-                        let to_remove = std::fs::read_dir(dir)
-                            .unwrap()
-                            .filter_map(|f| f.ok())
-                            .filter(|x| x.file_type().map(|x| x.is_file()).unwrap_or(false))
-                            .filter(|x| {
-                                let p = x.path();
-                                let name = p.file_stem().unwrap().to_string_lossy();
-                                if let Some((stem, time)) = name.rsplit_once("-") {
-                                    let check = |(ix, x): (usize, char)| match ix {
-                                        8 => x == 'T',
-                                        _ => x.is_digit(10),
-                                    };
-                                    let len = match period {
-                                        Period::Minute => time.len() == 13,
-                                        Period::Hour => time.len() == 11,
-                                        Period::Day => time.len() == 8,
-                                        Period::Month => time.len() == 6,
-                                        Period::Year => time.len() == 4,
-                                    };
-                                    len && time.chars().enumerate().all(check)
-                                        && path
-                                            .file_stem()
-                                            .map(|x| x.to_string_lossy() == stem)
-                                            .unwrap_or(false)
-                                } else {
-                                    false
-                                }
-                            })
-                            .filter(|x| {
-                                x.metadata()
-                                    .ok()
-                                    .and_then(|x| x.modified().ok())
-                                    .map(|time| {
-                                        time.elapsed()
-                                            .map(|elapsed| elapsed > keep_duration)
-                                            .unwrap_or(false)
-                                    })
-                                    .unwrap_or(false)
-                            });
-
-                        let del_msg = to_remove
-                            .filter(|f| std::fs::remove_file(f.path()).is_ok())
-                            .map(|x| x.file_name().to_string_lossy().to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ");
+                        let del_msg = clean_expire_log(path, period, keep_duration);
                         if !del_msg.is_empty() {
                             crate::info!("Log file deleted: {}", del_msg);
                         }
