@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.12](https://github.com/nonconvextech/ftlog/compare/v0.2.11...v0.2.12) (2023-12-21)
+
+
+### Features
+
+* delete expire files when init ([32816fe](https://github.com/nonconvextech/ftlog/commit/32816fe92e09fde9a079b6c8c92ce4ea7bbaefae))
+
 ### [0.2.11](https://github.com/nonconvextech/ftlog/compare/v0.2.10...v0.2.11) (2023-11-30)
 
 
