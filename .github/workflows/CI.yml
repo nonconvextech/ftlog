@@ -10,81 +10,46 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Install cargo
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
-            components: rustfmt
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: rustfmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
 
       - name: check build
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all --bins --examples --tests --no-default-features
+        run: cargo check --all --bins --examples --tests --no-default-features
 
       - name: check build (random_drop)
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all --bins --examples --tests --no-default-features --features=random_drop
+        run: cargo check --all --bins --examples --tests --no-default-features --features=random_drop
 
       - name: tests
-        uses: actions-rs/cargo@v1
         timeout-minutes: 40
-        with:
-          command: test
-          args: --all --no-fail-fast --no-default-features --release -- --nocapture 
+        run: cargo test --all --no-fail-fast --no-default-features --release -- --nocapture 
 
   test_tsc:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Install latest cargo
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
-            components: rustfmt
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: check build (feature:tsc)
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all --bins --examples --tests --features=tsc
+        run: cargo check --all --bins --examples --tests --features=tsc
 
       - name: tests (feature:tsc)
-        uses: actions-rs/cargo@v1
         timeout-minutes: 40
-        with:
-          command: test
-          args: --all --no-fail-fast --features=tsc --release -- --nocapture
+        run: cargo test --all --no-fail-fast --features=tsc --release -- --nocapture
 
   doc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Install latest cargo
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: doc
-        uses: actions-rs/cargo@v1
         env:
           RUSTDOCFLAGS: -Dwarnings
-        with:
-          command: doc
-          args: --all --no-deps
+        run: cargo doc --all --no-deps
 
   publish:
     name: Publish Package
@@ -92,11 +57,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Install latest cargo
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: stable
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Check semver
         uses: obi1kenobi/cargo-semver-checks-action@v1
@@ -108,6 +70,4 @@ jobs:
         shell: bash
 
       - name: publish
-        uses: actions-rs/cargo@v1
-        with:
-          command: publish
+        run: cargo publish
