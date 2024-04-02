@@ -820,7 +820,7 @@ impl Builder {
             bounded_channel_option: Some(BoundedChannelOption {
                 size: 100_000,
                 block: false,
-                print: false,
+                print: true,
             }),
             timezone: LogTimezone::Local,
             time_format: None,
