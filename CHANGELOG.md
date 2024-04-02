@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.13](https://github.com/nonconvextech/ftlog/compare/v0.2.12...v0.2.13) (2024-04-02)
+
+
+### Features
+
+* enable stderr excessive log message warnning ([524888a](https://github.com/nonconvextech/ftlog/commit/524888afd2b9d79806b65f0827f7672b0840ab32))
+
 ### [0.2.12](https://github.com/nonconvextech/ftlog/compare/v0.2.11...v0.2.12) (2023-12-21)
 
 
