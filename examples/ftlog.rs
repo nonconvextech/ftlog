@@ -9,8 +9,8 @@ fn init() -> LoggerGuard {
     // Rotate every day, clean stale logs that were modified 7 days ago on each rotation
     let writer = FileAppender::builder()
         .path("./current.log")
-        .rotate(Period::Day)
-        .expire(Duration::weeks(1))
+        .rotate(Period::Minute)
+        .expire(Duration::minutes(4))
         .build();
     ftlog::Builder::new()
         // global max log level
@@ -26,10 +26,11 @@ fn init() -> LoggerGuard {
 
 fn main() {
     let _guard = init();
-    info!("Hello, world!");
-    for i in 0..120 {
-        info!("running {}!", i);
-        info!(limit=3000i64; "limit running{} !", i);
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
+    // info!("Hello, world!");
+    // for i in 0..120 {
+    //     info!("running {}!", i);
+    //     info!(limit=3000i64; "limit running{} !", i);
+    //     std::thread::sleep(std::time::Duration::from_secs(1));
+    // }
+    std::thread::sleep(std::time::Duration::from_secs(5));
 }

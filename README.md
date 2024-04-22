@@ -78,9 +78,11 @@ let _guard = ftlog::builder()
             .expire(Duration::days(7))
             .build(),
     )
-    // Do not convert to local timezone for timestamp, this does not affect worker thread,
-    // but can boost log thread performance (higher throughput).
-    .utc()
+    // timezone of log message timestamp, use local by default
+    .local_timezone()
+    // or use fiexed timezone for better throughput, since retrieving timezone is a time consuming operation
+    // this does not affect worker threads (that call log), but can boost log thread performance (higher throughput).
+    .fixed_timezone(time::UtcOffset::current_local_offset().unwrap())
     // level filter for root appender
     .root_log_level(LevelFilter::Warn)
     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
