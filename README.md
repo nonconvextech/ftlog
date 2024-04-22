@@ -79,7 +79,7 @@ let _guard = ftlog::builder()
             .build(),
     )
     // timezone of log message timestamp, use local by default
-    .local_timezone()
+    // .local_timezone()
     // or use fiexed timezone for better throughput, since retrieving timezone is a time consuming operation
     // this does not affect worker threads (that call log), but can boost log thread performance (higher throughput).
     .fixed_timezone(time::UtcOffset::current_local_offset().unwrap())
