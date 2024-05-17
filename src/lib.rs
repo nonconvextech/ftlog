@@ -84,7 +84,7 @@
 //!     // level filter for root appender
 //!     .root_log_level(LevelFilter::Warn)
 //!     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
-//!     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+//!     .filter(|msg, level, target| target == "ftlog::appender" && level == LevelFilter::Error, "ftlog-appender")
 //!     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
 //!     .try_init()
 //!     .expect("logger build or set failed");
@@ -372,6 +372,7 @@ struct LogMsg {
     limit: u32,
     limit_key: u64,
 }
+
 impl LogMsg {
     fn write(
         self,
@@ -391,11 +392,11 @@ impl LogMsg {
 
         let now = now();
 
-        let writer = if let Some(filter) = filters.iter().find(|x| self.target.starts_with(x.path))
+        // Find an appender filter if one exists
+        let writer = if let Some(filter) = filters
+            .iter()
+            .find(|x| (*x.filter)(&self.msg, self.level, &self.target))
         {
-            if filter.level.map(|l| l < self.level).unwrap_or(false) {
-                return;
-            }
             filter
                 .appender
                 .and_then(|n| appenders.get_mut(n))
@@ -546,14 +547,14 @@ impl FtLogFormat for FtLogFormatter {
             thread: std::thread::current().name().map(|n| n.to_string()),
             file: record
                 .file_static()
-                .map(Cow::Borrowed)
+                .map(|s| Cow::Borrowed(s))
                 .or_else(|| record.file().map(|s| Cow::Owned(s.to_owned())))
                 .unwrap_or(Cow::Borrowed("")),
             line: record.line(),
             args: record
                 .args()
                 .as_str()
-                .map(Cow::Borrowed)
+                .map(|s| Cow::Borrowed(s))
                 .unwrap_or_else(|| Cow::Owned(format!("{}", record.args()))),
         })
     }
@@ -607,6 +608,7 @@ impl Drop for LoggerGuard {
 pub struct Logger {
     format: Box<dyn FtLogFormat>,
     level: LevelFilter,
+    filters: Vec<Box<dyn Fn(&Record) -> bool + Send + Sync>>,
     queue: Sender<LoggerInput>,
     notification: Receiver<LoggerOutput>,
     block: bool,
@@ -654,7 +656,15 @@ impl Log for Logger {
             .and_then(|x| x.to_u64())
             .unwrap_or(0) as u32;
 
-        let msg = self.format.msg(record);
+        // This will short circuit if any of the filters return false, meaning don't keep this record.
+        if !self.filters.is_empty() {
+            if self.filters.iter().all(|filter| filter(record)) {
+                // Drop this log record
+                println!("Dropping this record {:?}", record);
+                return;
+            }
+        }
+
         let limit_key = if limit == 0 {
             0
         } else {
@@ -667,6 +677,7 @@ impl Log for Logger {
             record.line().unwrap_or(0).hash(&mut b);
             b.finish()
         };
+        let msg = self.format.msg(record);
         let msg = LoggerInput::LogMsg(LogMsg {
             time: now(),
             msg,
@@ -745,11 +756,11 @@ struct BoundedChannelOption {
 ///     ))
 ///     // ---------- configure additional filter ----------
 ///     // write to "ftlog-appender" appender, with different level filter
-///     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+///     .filter(|msg, level, target| target == "ftlog::appender"&& level == LevelFilter::Error, "ftlog-appender")
 ///     // write to root appender, but with different level filter
-///     .filter("ftlog", None, LevelFilter::Trace)
+///     .filter(|msg, level, target| target == "ftlog" && level == LevelFilter::Trace, None)
 ///     // write to "ftlog" appender, with default level filter
-///     .filter("ftlog::appender::file", "ftlog", None)
+///     .filter(|msg, level, target| target == "ftlog::appender::file", "ftlog")
 ///     // ----------  configure additional appender ----------
 ///     // new appender
 ///     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
@@ -771,6 +782,7 @@ pub struct Builder {
     root: Box<dyn Write + Send>,
     appenders: HashMap<&'static str, Box<dyn Write + Send + 'static>>,
     filters: Vec<Directive>,
+    drop_filters: Vec<Box<dyn Fn(&Record) -> bool + Send + Sync>>,
     bounded_channel_option: Option<BoundedChannelOption>,
     timezone: LogTimezone,
 }
@@ -782,8 +794,7 @@ pub fn builder() -> Builder {
 }
 
 struct Directive {
-    path: &'static str,
-    level: Option<LevelFilter>,
+    filter: Box<dyn Fn(&dyn Display, Level, &str) -> bool + Send>,
     appender: Option<&'static str>,
 }
 /// timezone for log
@@ -803,6 +814,7 @@ impl Builder {
     /// Create a ftlog builder with default settings:
     /// - global log level: INFO
     /// - root log level: INFO
+    /// - no drop filters
     /// - default formatter: `FtLogFormatter`
     /// - output to stderr
     /// - bounded channel between worker thread and log thread, with a size limit of 100_000
@@ -816,6 +828,7 @@ impl Builder {
             root: Box::new(stderr()) as Box<dyn Write + Send>,
             appenders: HashMap::new(),
             filters: Vec::new(),
+            drop_filters: Vec::new(),
             bounded_channel_option: Some(BoundedChannelOption {
                 size: 100_000,
                 block: false,
@@ -837,6 +850,16 @@ impl Builder {
     #[inline]
     pub fn time_format(mut self, format: OwnedFormatItem) -> Builder {
         self.time_format = Some(format);
+        self
+    }
+
+    /// This will drop log records before they are sent into the channel.
+    #[inline]
+    pub fn drop_filters<F>(mut self, filter: F) -> Builder
+    where
+        F: Fn(&Record) -> bool + Send + Sync + 'static,
+    {
+        self.drop_filters.push(Box::new(filter));
         self
     }
 
@@ -895,25 +918,23 @@ impl Builder {
     }
 
     /// Add a filter to redirect log to different output
-    /// target (e.g. stderr, stdout, different files).
+    /// target (e.g. stderr, stdout, different files). The filter closure takes in a
+    /// message, a level and a target. The filter must return true if the log message
+    /// should use this appender. Note that this will use the first match that succeeds.
     ///
     /// **ATTENTION**: level more verbose than `Builder::max_log_level` will be ignored.
     /// Say we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
     /// ftlog will still log up to INFO.
     #[inline]
-    pub fn filter<A: Into<Option<&'static str>>, L: Into<Option<LevelFilter>>>(
-        mut self,
-        module_path: &'static str,
-        appender: A,
-        level: L,
-    ) -> Builder {
+    pub fn filter<A: Into<Option<&'static str>>, F>(mut self, filter: F, appender: A) -> Builder
+    where
+        F: Fn(&dyn Display, Level, &str) -> bool + Send + Sync + 'static,
+    {
         let appender = appender.into();
-        let level = level.into();
-        if appender.is_some() || level.is_some() {
+        if appender.is_some() {
             self.filters.push(Directive {
-                path: module_path,
+                filter: Box::new(filter),
                 appender,
-                level,
             });
         }
         self
@@ -996,10 +1017,7 @@ impl Builder {
             )
             .unwrap()
         });
-        let mut filters = self.filters;
-        // sort filters' paths to ensure match for longest path
-        filters.sort_by(|a, b| a.path.len().cmp(&b.path.len()));
-        filters.reverse();
+        let filters = self.filters;
         // check appender name in filters are all valid
         for appender_name in filters.iter().filter_map(|x| x.appender) {
             if !self.appenders.contains_key(appender_name) {
@@ -1025,17 +1043,6 @@ impl Builder {
             .spawn(move || {
                 let mut appenders = self.appenders;
                 let filters = filters;
-
-                for filter in &filters {
-                    if let Some(level) = filter.level {
-                        if global_level < level {
-                            warn!(
-                                "Logs with level more verbose than {} will be ignored in `{}` ",
-                                global_level, filter.path,
-                            );
-                        }
-                    }
-                }
 
                 let mut root = self.root;
                 let mut last_log = HashMap::default();
@@ -1121,6 +1128,7 @@ impl Builder {
             .unwrap_or(false);
         Ok(Logger {
             format: self.format,
+            filters: self.drop_filters,
             level: global_level,
             queue: sync_sender,
             notification: notification_receiver,

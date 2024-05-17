@@ -10,9 +10,9 @@ pub fn setup() {
         .bounded(10000, true)
         .root(FileAppender::new("./root.log"))
         // .utc()
-        .filter("rotate", "rotate", None)
+        .filter(|_msg, _level, target| target == "rotate", "rotate")
         .appender("rotate", FileAppender::rotate("rotate.log", Period::Minute))
-        .filter("expire", "expire", None)
+        .filter(|_msg, _level, target| target == "expire", "expire")
         .appender(
             "expire",
             FileAppender::rotate_with_expire("expire.log", Period::Day, Duration::days(7)),
