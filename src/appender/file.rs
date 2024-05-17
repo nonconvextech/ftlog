@@ -160,10 +160,8 @@ impl<
                 let del_msg = clean_expire_log(p, period, expire);
                 if !del_msg.is_empty() {
                     file.write_fmt(format_args!("Log file deleted: {}", del_msg))
-                        .expect(&format!(
-                            "Write msg to \"{}\" failed",
-                            path.to_string_lossy()
-                        ));
+                        .unwrap_or_else(|_| panic!("Write msg to \"{}\" failed",
+                            path.to_string_lossy()));
                 }
                 FileAppender {
                     file,
@@ -185,7 +183,7 @@ impl<
                     OpenOptions::new()
                         .create(true)
                         .append(true)
-                        .open(&path)
+                        .open(path)
                         .unwrap(),
                 );
                 FileAppender {
@@ -207,10 +205,8 @@ impl<
                         .create(true)
                         .append(true)
                         .open(&builder.path)
-                        .expect(&format!(
-                            "Fail to create log file: {}",
-                            builder.path.to_string_lossy()
-                        )),
+                        .unwrap_or_else(|_| panic!("Fail to create log file: {}",
+                            builder.path.to_string_lossy())),
                 ),
                 path: builder.path,
                 rotate: None,
@@ -295,7 +291,7 @@ impl FileAppender {
         match timezone {
             LogTimezone::Local => local_timezone(),
             LogTimezone::Utc => UtcOffset::UTC,
-            LogTimezone::Fixed(offset) => offset.clone(),
+            LogTimezone::Fixed(offset) => *offset,
         }
     }
 
@@ -367,10 +363,10 @@ fn clean_expire_log(path: PathBuf, rotate_period: Period, keep_duration: Duratio
         .filter(|x| {
             let p = x.path();
             let name = p.file_stem().unwrap().to_string_lossy();
-            if let Some((stem, time)) = name.rsplit_once("-") {
+            if let Some((stem, time)) = name.rsplit_once('-') {
                 let check = |(ix, x): (usize, char)| match ix {
                     8 => x == 'T',
-                    _ => x.is_digit(10),
+                    _ => x.is_ascii_digit(),
                 };
                 let len = match rotate_period {
                     Period::Minute => time.len() == 13,
@@ -422,9 +418,9 @@ impl Write for FileAppender {
                 let path = Self::file(&self.path, *period, &self.timezone);
                 // remove outdated log files
                 if let Some(keep_duration) = keep {
-                    let keep_duration = keep_duration.clone();
+                    let keep_duration = *keep_duration;
                     let path = self.path.clone();
-                    let period = period.clone();
+                    let period = *period;
                     std::thread::spawn(move || {
                         let del_msg = clean_expire_log(path, period, keep_duration);
                         if !del_msg.is_empty() {

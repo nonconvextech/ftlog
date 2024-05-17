@@ -1,6 +1,5 @@
 use ftlog::{
-    appender::{file::Period, FileAppender},
-    info, LoggerGuard,
+    appender::{file::Period, FileAppender}, LoggerGuard,
 };
 use log::LevelFilter;
 use time::Duration;

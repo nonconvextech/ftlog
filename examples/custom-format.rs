@@ -41,7 +41,7 @@ fn init() -> LoggerGuard {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_str(&format!(
                 "{}@{}||{}:{}[{}] {}",
-                self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
+                self.thread.as_deref().unwrap_or(""),
                 self.module_path.unwrap_or(""),
                 self.file.unwrap_or(""),
                 self.line.unwrap_or(0),

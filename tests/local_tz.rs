@@ -5,7 +5,7 @@ use std::{
 
 use ftlog::appender::{Duration, FileAppender, Period};
 
-pub fn setup() -> () {
+pub fn setup() {
     let logger = ftlog::Builder::new()
         .bounded(10000, true)
         .root(FileAppender::new("./root.log"))
@@ -24,7 +24,6 @@ pub fn setup() -> () {
 fn clean(dir: &str) {
     for file in read_dir(dir)
         .unwrap()
-        .into_iter()
         .filter_map(|x| x.ok())
         .filter(|f| f.file_type().unwrap().is_file())
     {

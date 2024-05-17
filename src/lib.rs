@@ -375,7 +375,7 @@ struct LogMsg {
 impl LogMsg {
     fn write(
         self,
-        filters: &Vec<Directive>,
+        filters: &[Directive],
         appenders: &mut HashMap<&'static str, Box<dyn Write + Send>>,
         root: &mut Box<dyn Write + Send>,
         root_level: LevelFilter,
@@ -407,6 +407,13 @@ impl LogMsg {
             root
         };
 
+        let delay = duration(self.time, now);
+        let utc_datetime = to_utc(self.time);
+
+        let offset_datetime = offset
+            .map(|o| utc_datetime.to_offset(o))
+            .unwrap_or(utc_datetime);
+        let s: String;
         if self.limit > 0 {
             let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0);
             if let Some(last) = last_log.get(&self.limit_key) {
@@ -416,14 +423,8 @@ impl LogMsg {
                 }
             }
             last_log.insert(self.limit_key, now);
-            let delay = duration(self.time, now);
-            let utc_datetime = to_utc(self.time);
 
-            let offset_datetime = offset
-                .map(|o| utc_datetime.to_offset(o))
-                .unwrap_or(utc_datetime);
-
-            let s = format!(
+            s = format!(
                 "{} {}ms {} {}\n",
                 offset_datetime
                     .format(&time_format)
@@ -434,17 +435,9 @@ impl LogMsg {
                 *missed_entry,
                 msg
             );
-            if let Err(e) = writer.write_all(s.as_bytes()) {
-                eprintln!("logger write message failed: {}", e);
-            };
             *missed_entry = 0;
         } else {
-            let delay = duration(self.time, now);
-            let utc_datetime = to_utc(self.time);
-            let offset_datetime = offset
-                .map(|o| utc_datetime.to_offset(o))
-                .unwrap_or(utc_datetime);
-            let s = format!(
+            s = format!(
                 "{} {}ms {}\n",
                 offset_datetime
                     .format(&time_format)
@@ -454,10 +447,10 @@ impl LogMsg {
                 delay.as_millis(),
                 msg
             );
-            if let Err(e) = writer.write_all(s.as_bytes()) {
-                eprintln!("logger write message failed: {}", e);
-            };
         }
+        if let Err(e) = writer.write_all(s.as_bytes()) {
+            eprintln!("logger write message failed: {}", e);
+        };
     }
 }
 
@@ -553,14 +546,14 @@ impl FtLogFormat for FtLogFormatter {
             thread: std::thread::current().name().map(|n| n.to_string()),
             file: record
                 .file_static()
-                .map(|s| Cow::Borrowed(s))
+                .map(Cow::Borrowed)
                 .or_else(|| record.file().map(|s| Cow::Owned(s.to_owned())))
                 .unwrap_or(Cow::Borrowed("")),
             line: record.line(),
             args: record
                 .args()
                 .as_str()
-                .map(|s| Cow::Borrowed(s))
+                .map(Cow::Borrowed)
                 .unwrap_or_else(|| Cow::Owned(format!("{}", record.args()))),
         })
     }
@@ -579,7 +572,7 @@ impl Display for Message {
         f.write_str(&format!(
             "{} {} [{}:{}] {}",
             self.level,
-            self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
+            self.thread.as_deref().unwrap_or(""),
             self.file,
             self.line.unwrap_or(0),
             self.args
@@ -676,14 +669,14 @@ impl Log for Logger {
         };
         let msg = LoggerInput::LogMsg(LogMsg {
             time: now(),
-            msg: msg,
+            msg,
             target: record.target().to_owned(),
             level: record.level(),
             limit,
             limit_key,
         });
         if self.block {
-            if let Err(_) = self.queue.send(msg) {
+            if self.queue.send(msg).is_err() {
                 let stop = self.stopped.load(Ordering::SeqCst);
                 if !stop {
                     eprintln!("logger queue closed when logging, this is a bug");
@@ -919,8 +912,8 @@ impl Builder {
         if appender.is_some() || level.is_some() {
             self.filters.push(Directive {
                 path: module_path,
-                appender: appender,
-                level: level,
+                appender,
+                level,
             });
         }
         self
