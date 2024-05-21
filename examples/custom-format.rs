@@ -2,9 +2,9 @@ use std::fmt::Display;
 
 use ftlog::{
     appender::{file::Period, FileAppender},
-    info, FtLogFormat, LoggerGuard,
+    info, FtLogFormat, LoggerGuard, Record,
 };
-use log::{Level, LevelFilter, Record};
+use log::{Level, LevelFilter};
 use time::Duration;
 fn init() -> LoggerGuard {
     // Custom log style.
@@ -72,11 +72,20 @@ fn init() -> LoggerGuard {
         )
         // ---------- configure additional filter ----------
         // write to "ftlog-appender" appender, with different level filter
-        .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+        .filter(
+            |_msg, level, target| target == "ftlog::appender" && level == LevelFilter::Error,
+            "ftlog-appender",
+        )
         // write to root appender, but with different level filter
-        .filter("ftlog", None, LevelFilter::Trace)
+        .filter(
+            |_msg, level, target| target == "ftlog" && level == LevelFilter::Trace,
+            "ftlog",
+        )
         // write to "ftlog" appender, with default level filter
-        .filter("ftlog::appender::file", "ftlog", None)
+        .filter(
+            |_msg, _level, target| target == "ftlog::appender::file",
+            "ftlog",
+        )
         // ----------  configure additional appender ----------
         // new appender
         .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
