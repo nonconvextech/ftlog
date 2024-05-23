@@ -384,13 +384,6 @@ impl LogMsg {
         offset: Option<UtcOffset>,
         time_format: &time::format_description::OwnedFormatItem,
     ) {
-        let msg = self.msg.to_string();
-        if msg.is_empty() {
-            return;
-        }
-
-        let now = now();
-
         let writer = if let Some(filter) = filters.iter().find(|x| self.target.starts_with(x.path))
         {
             if filter.level.map(|l| l < self.level).unwrap_or(false) {
@@ -406,6 +399,13 @@ impl LogMsg {
             }
             root
         };
+
+        let msg = self.msg.to_string();
+        if msg.is_empty() {
+            return;
+        }
+
+        let now = now();
 
         if self.limit > 0 {
             let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0);
