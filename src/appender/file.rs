@@ -160,8 +160,9 @@ impl<
                 let del_msg = clean_expire_log(p, period, expire);
                 if !del_msg.is_empty() {
                     file.write_fmt(format_args!("Log file deleted: {}", del_msg))
-                        .unwrap_or_else(|_| panic!("Write msg to \"{}\" failed",
-                            path.to_string_lossy()));
+                        .unwrap_or_else(|_| {
+                            panic!("Write msg to \"{}\" failed", path.to_string_lossy())
+                        });
                 }
                 FileAppender {
                     file,
@@ -205,8 +206,12 @@ impl<
                         .create(true)
                         .append(true)
                         .open(&builder.path)
-                        .unwrap_or_else(|_| panic!("Fail to create log file: {}",
-                            builder.path.to_string_lossy())),
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Fail to create log file: {}",
+                                builder.path.to_string_lossy()
+                            )
+                        }),
                 ),
                 path: builder.path,
                 rotate: None,
