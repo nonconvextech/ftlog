@@ -76,11 +76,6 @@
 //!             .expire(Duration::days(7))
 //!             .build(),
 //!     )
-//!     // timezone of log message timestamp, use local by default
-//!     // .local_timezone()
-//!     // or use fiexed timezone for better throughput, since retrieving timezone is a time consuming operation
-//!     // this does not affect worker threads (that call log), but can boost log thread performance (higher throughput).
-//!     .fixed_timezone(time::UtcOffset::current_local_offset().unwrap())
 //!     // level filter for root appender
 //!     .root_log_level(LevelFilter::Warn)
 //!     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
@@ -312,6 +307,7 @@ use tm::{duration, now, to_utc, Time};
 
 #[cfg(not(feature = "tsc"))]
 mod tm {
+
     use super::*;
 
     pub type Time = std::time::SystemTime;
@@ -365,7 +361,6 @@ fn local_timezone() -> UtcOffset {
 }
 
 struct LogMsg {
-    time: Time,
     msg: Box<dyn Sync + Send + Display>,
     level: Level,
     target: String,
@@ -382,8 +377,6 @@ impl LogMsg {
         root_level: LevelFilter,
         missed_log: &mut HashMap<u64, i64, nohash_hasher::BuildNoHashHasher<u64>>,
         last_log: &mut HashMap<u64, Time, nohash_hasher::BuildNoHashHasher<u64>>,
-        offset: Option<UtcOffset>,
-        time_format: &time::format_description::OwnedFormatItem,
     ) {
         let msg = self.msg.to_string();
         if msg.is_empty() {
@@ -408,12 +401,6 @@ impl LogMsg {
             root
         };
 
-        let delay = duration(self.time, now);
-        let utc_datetime = to_utc(self.time);
-
-        let offset_datetime = offset
-            .map(|o| utc_datetime.to_offset(o))
-            .unwrap_or(utc_datetime);
         let s: String;
         if self.limit > 0 {
             let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0);
@@ -425,29 +412,10 @@ impl LogMsg {
             }
             last_log.insert(self.limit_key, now);
 
-            s = format!(
-                "{} {}ms {} {}\n",
-                offset_datetime
-                    .format(&time_format)
-                    .unwrap_or_else(|_| offset_datetime
-                        .format(&time::format_description::well_known::Rfc3339)
-                        .unwrap()),
-                delay.as_millis(),
-                *missed_entry,
-                msg
-            );
+            s = format!("{} {}\n", *missed_entry, msg);
             *missed_entry = 0;
         } else {
-            s = format!(
-                "{} {}ms {}\n",
-                offset_datetime
-                    .format(&time_format)
-                    .unwrap_or_else(|_| offset_datetime
-                        .format(&time::format_description::well_known::Rfc3339)
-                        .unwrap()),
-                delay.as_millis(),
-                msg
-            );
+            s = format!("{}\n", msg);
         }
         if let Err(e) = writer.write_all(s.as_bytes()) {
             eprintln!("logger write message failed: {}", e);
@@ -543,6 +511,7 @@ impl FtLogFormat for FtLogFormatter {
     #[inline]
     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display> {
         Box::new(Message {
+            time: now(),
             level: record.level(),
             thread: std::thread::current().name().map(|n| n.to_string()),
             file: record
@@ -561,6 +530,7 @@ impl FtLogFormat for FtLogFormatter {
 }
 
 struct Message {
+    time: Time,
     level: Level,
     thread: Option<String>,
     file: Cow<'static, str>,
@@ -570,8 +540,13 @@ struct Message {
 
 impl Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let utc_datetime = to_utc(self.time);
+
         f.write_str(&format!(
-            "{} {} [{}:{}] {}",
+            "{} {} {} [{}:{}] {}",
+            utc_datetime
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap(),
             self.level,
             self.thread.as_deref().unwrap_or(""),
             self.file,
@@ -679,7 +654,6 @@ impl Log for Logger {
         };
         let msg = self.format.msg(record);
         let msg = LoggerInput::LogMsg(LogMsg {
-            time: now(),
             msg,
             target: record.target().to_owned(),
             level: record.level(),
@@ -784,7 +758,6 @@ pub struct Builder {
     filters: Vec<Directive>,
     drop_filters: Vec<Box<dyn Fn(&Record) -> bool + Send + Sync>>,
     bounded_channel_option: Option<BoundedChannelOption>,
-    timezone: LogTimezone,
 }
 
 /// Handy function to get ftlog builder
@@ -834,7 +807,6 @@ impl Builder {
                 block: false,
                 print: true,
             }),
-            timezone: LogTimezone::Local,
             time_format: None,
         }
     }
@@ -967,56 +939,11 @@ impl Builder {
         self
     }
 
-    #[inline]
-    /// Log with timestamp of local timezone
-    ///
-    /// Timezone is fixed after logger setup for the following reasons:
-    /// 1. `time` v0.3 currently do not allow access to local offset for multithread process
-    /// in unix-like OS.
-    /// 1. timezone retrieval from OS is quite slow (around several microsecond) compare with
-    /// utc timestamp retrieval (around tens of nanoseconds)
-    pub fn local_timezone(mut self) -> Builder {
-        self.timezone = LogTimezone::Local;
-        self
-    }
-
-    #[inline]
-    /// Log with timestamp of UTC timezone
-    pub fn utc(mut self) -> Builder {
-        self.timezone = LogTimezone::Utc;
-        self
-    }
-
-    #[inline]
-    /// Log with timestamp of fixed timezone
-    pub fn fixed_timezone(mut self, timezone: UtcOffset) -> Builder {
-        self.timezone = LogTimezone::Fixed(timezone);
-        self
-    }
-
-    #[inline]
-    /// Specify the timezone of log messages
-    pub fn timezone(mut self, timezone: LogTimezone) -> Builder {
-        self.timezone = timezone;
-        self
-    }
-
     /// Finish building ftlog logger
     ///
     /// The call spawns a log thread to formatting log message into string,
     /// and write to output target.
     pub fn build(self) -> Result<Logger, IoError> {
-        let offset = match self.timezone {
-            LogTimezone::Local => Some(local_timezone()),
-            LogTimezone::Utc => None,
-            LogTimezone::Fixed(offset) => Some(offset),
-        };
-        let time_format = self.time_format.unwrap_or_else(|| {
-            time::format_description::parse_owned::<1>(
-                "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]+[offset_hour]",
-            )
-            .unwrap()
-        });
         let filters = self.filters;
         // check appender name in filters are all valid
         for appender_name in filters.iter().filter_map(|x| x.appender) {
@@ -1059,8 +986,6 @@ impl Builder {
                                 root_level,
                                 &mut missed_log,
                                 &mut last_log,
-                                offset,
-                                &time_format,
                             );
                         }
                         Ok(LoggerInput::Flush) => {
@@ -1074,8 +999,6 @@ impl Builder {
                                         root_level,
                                         &mut missed_log,
                                         &mut last_log,
-                                        offset,
-                                        &time_format,
                                     )
                                 } else {
                                     break 'queue;
