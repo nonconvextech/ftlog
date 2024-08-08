@@ -582,6 +582,7 @@ impl Drop for LoggerGuard {
 /// ftlog global logger
 pub struct Logger {
     format: Box<dyn FtLogFormat>,
+    env_filter: Option<env_filter::Filter>,
     level: LevelFilter,
     filters: Vec<Box<dyn Fn(&Record) -> bool + Send + Sync>>,
     queue: Sender<LoggerInput>,
@@ -636,6 +637,12 @@ impl Log for Logger {
             if self.filters.iter().all(|filter| filter(record)) {
                 // Drop this log record
                 println!("Dropping this record {:?}", record);
+                return;
+            }
+        }
+        if let Some(filter) = &self.env_filter {
+            if !filter.matches(record) {
+                // Drop this log record
                 return;
             }
         }
@@ -749,6 +756,7 @@ struct BoundedChannelOption {
 /// local timezone offset forever. Thus timestamp in log does not aware of timezone
 /// change by OS.
 pub struct Builder {
+    env_filter: bool,
     format: Box<dyn FtLogFormat>,
     time_format: Option<OwnedFormatItem>,
     level: Option<LevelFilter>,
@@ -795,6 +803,7 @@ impl Builder {
     /// - log with timestamp of local timezone
     pub fn new() -> Builder {
         Builder {
+            env_filter: false,
             format: Box::new(FtLogFormatter),
             level: None,
             root_level: None,
@@ -912,6 +921,14 @@ impl Builder {
         self
     }
 
+    /// Use the RUST_LOG env variable to filter logs. Uses the same syntax that env_logger
+    /// supports because it uses the same Filter internally.
+    pub fn use_env_filter(mut self) -> Builder {
+        self.env_filter = true;
+
+        self
+    }
+
     #[inline]
     /// Configure the default log output target.
     ///
@@ -952,13 +969,26 @@ impl Builder {
             }
         }
         let global_level = self.level.unwrap_or(LevelFilter::Info);
-        let root_level = self.root_level.unwrap_or(global_level);
+        let mut root_level = self.root_level.unwrap_or(global_level);
         if global_level < root_level {
             warn!(
                 "Logs with level more verbose than {} will be ignored",
                 global_level,
             );
         }
+        let env_filter = if self.env_filter {
+            let mut builder = env_filter::Builder::new();
+            // Parse a logging filter from an environment variable.
+            if let Ok(rust_log) = std::env::var("RUST_LOG") {
+                builder.parse(&rust_log);
+            }
+            let filter = builder.build();
+            // Set the root level filter to this
+            root_level = filter.filter();
+            Some(filter)
+        } else {
+            None
+        };
 
         let (sync_sender, receiver) = match &self.bounded_channel_option {
             None => unbounded(),
@@ -1050,6 +1080,7 @@ impl Builder {
             .map(|x| x.print)
             .unwrap_or(false);
         Ok(Logger {
+            env_filter,
             format: self.format,
             filters: self.drop_filters,
             level: global_level,
