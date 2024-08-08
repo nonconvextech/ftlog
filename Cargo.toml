@@ -22,6 +22,7 @@ random_drop = ["fastrand"]
 [dependencies]
 arc-swap = "1"
 crossbeam-channel = "0.5.0"
+env_filter = "0.1"
 hashbrown = "0.14"
 nohash-hasher = "0.2"
 typed-builder = "0.16"
