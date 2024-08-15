@@ -166,6 +166,20 @@ let logger = ftlog::builder()
     .unwrap();
 logger.init().unwrap();
 ```
+
+### 日志发送到 UDP 服务器
+
+将日志发送到 UDP 协议的日志机集中收集
+
+```rust
+// 目标服务监听的地址
+let target_addr = "127.0.0.1:8080";
+let udp_appender = UdpAppender::builder()
+    .target(target_addr.parse().unwrap())
+    .build();
+ftlog::builder().root(udp_appender).try_init().unwrap();
+```
+
 ## 可选功能
 - **tsc**
   使用TSC寄存器作为时钟源，实现同等时间精度下更快地获取时间戳。
