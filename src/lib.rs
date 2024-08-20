@@ -418,7 +418,7 @@ impl LogMsg {
             format!("{} {}\n", *missed_entry, msg)
         } else {
             format!("{}\n", msg)
-        }
+        };
         if let Err(e) = writer.write_all(s.as_bytes()) {
             eprintln!("logger write message failed: {}", e);
         };
