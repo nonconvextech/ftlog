@@ -378,7 +378,6 @@ impl LogMsg {
         missed_log: &mut HashMap<u64, i64, nohash_hasher::BuildNoHashHasher<u64>>,
         last_log: &mut HashMap<u64, Time, nohash_hasher::BuildNoHashHasher<u64>>,
     ) {
-
         // Find an appender filter if one exists
         let writer = if let Some(filter) = filters
             .iter()
@@ -395,15 +394,12 @@ impl LogMsg {
             root
         };
 
-
         let msg = self.msg.to_string();
         if msg.is_empty() {
             return;
         }
 
         let now = now();
-
- 
         let s = if self.limit > 0 {
             let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0);
             if let Some(last) = last_log.get(&self.limit_key) {
