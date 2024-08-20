@@ -378,12 +378,6 @@ impl LogMsg {
         missed_log: &mut HashMap<u64, i64, nohash_hasher::BuildNoHashHasher<u64>>,
         last_log: &mut HashMap<u64, Time, nohash_hasher::BuildNoHashHasher<u64>>,
     ) {
-        let msg = self.msg.to_string();
-        if msg.is_empty() {
-            return;
-        }
-
-        let now = now();
 
         // Find an appender filter if one exists
         let writer = if let Some(filter) = filters
@@ -401,8 +395,16 @@ impl LogMsg {
             root
         };
 
-        let s: String;
-        if self.limit > 0 {
+
+        let msg = self.msg.to_string();
+        if msg.is_empty() {
+            return;
+        }
+
+        let now = now();
+
+ 
+        let s = if self.limit > 0 {
             let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0);
             if let Some(last) = last_log.get(&self.limit_key) {
                 if duration(*last, now) < Duration::from_millis(self.limit as u64) {
@@ -412,10 +414,10 @@ impl LogMsg {
             }
             last_log.insert(self.limit_key, now);
 
-            s = format!("{} {}\n", *missed_entry, msg);
             *missed_entry = 0;
+            format!("{} {}\n", *missed_entry, msg)
         } else {
-            s = format!("{}\n", msg);
+            format!("{}\n", msg)
         }
         if let Err(e) = writer.write_all(s.as_bytes()) {
             eprintln!("logger write message failed: {}", e);
