@@ -3,9 +3,7 @@ use log::{info, LevelFilter};
 
 fn init() -> LoggerGuard {
     // Rotate every day, clean stale logs that were modified 7 days ago on each rotation
-    let writer = FileAppender::builder()
-    .path("./env_log.log")
-    .build();
+    let writer = FileAppender::builder().path("./env_log.log").build();
     ftlog::Builder::new()
         // global max log level
         .max_log_level(LevelFilter::Info)
