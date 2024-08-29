@@ -40,7 +40,7 @@ impl<__bind_addr: typed_builder::Optional<SocketAddr>>
         let socket = UdpSocket::bind(&builder.bind_addr).expect("failed to bind to UDP socket");
         UdpAppender {
             socket: Arc::new(socket),
-            target: builder.target.to_socket_addrs().unwrap().next().unwrap(),
+            target: builder.target,
         }
     }
 }
@@ -52,7 +52,7 @@ impl UdpAppender {
     /// use ftlog::appender::udp::UdpAppender;
     /// let appender = UdpAppender::builder()
     ///     .target("127.0.0.1:8080".parse().unwrap())
-    ///     .bind_addr("127.0.0.1:0")
+    ///     .bind_addr("127.0.0.1:0".parse().unwrap())
     ///     .build();
     /// ```
 
