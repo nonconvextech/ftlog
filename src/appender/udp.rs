@@ -89,6 +89,7 @@ mod test {
     use super::*;
     use std::io::Write;
     use std::net::UdpSocket;
+    use std::sync::mpsc::channel;
     use std::sync::{Arc, Mutex};
     use std::thread;
     #[test]
@@ -96,16 +97,19 @@ mod test {
         let mut appender = UdpAppender::new("127.0.0.1:8080");
         let flag = Arc::new(Mutex::new(false));
         let flag_clone = flag.clone();
+        let (tx, rx) = channel();
         // create a thread to receive the record
         let handler = thread::spawn(move || {
             let socket = UdpSocket::bind("127.0.0.1:8080").unwrap();
             // socket recv
+            let _ = tx.send(());
             let mut buf = [0; 1024];
             let (size, _) = socket.recv_from(&mut buf).unwrap();
             let mut f = flag_clone.lock().unwrap();
             // check the record
             *f = &buf[..size] == b"hello";
         });
+        rx.recv().unwrap();
         // write record
         appender.write("hello".as_bytes()).unwrap();
         handler.join().unwrap();
