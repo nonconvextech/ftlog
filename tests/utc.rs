@@ -10,9 +10,9 @@ pub fn setup() {
         .bounded(10000, true)
         .root(FileAppender::new("./root.log"))
         // .utc()
-        .filter(|_msg, _level, target| target == "rotate", "rotate")
+        .filter_with(|_msg, _level, target| target == "rotate", "rotate")
         .appender("rotate", FileAppender::rotate("rotate.log", Period::Minute))
-        .filter(|_msg, _level, target| target == "expire", "expire")
+        .filter_with(|_msg, _level, target| target == "expire", "expire")
         .appender(
             "expire",
             FileAppender::rotate_with_expire("expire.log", Period::Day, Duration::days(7)),
@@ -40,7 +40,7 @@ fn clean(dir: &str) {
     }
 }
 #[test]
-fn test_speed() {
+fn test_speed_utc() {
     // ~80MB
     setup();
     let elapsed1 = {

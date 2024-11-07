@@ -514,14 +514,14 @@ impl FtLogFormat for FtLogFormatter {
             thread: std::thread::current().name().map(|n| n.to_string()),
             file: record
                 .file_static()
-                .map(|s| Cow::Borrowed(s))
+                .map(Cow::Borrowed)
                 .or_else(|| record.file().map(|s| Cow::Owned(s.to_owned())))
                 .unwrap_or(Cow::Borrowed("")),
             line: record.line(),
             args: record
                 .args()
                 .as_str()
-                .map(|s| Cow::Borrowed(s))
+                .map(Cow::Borrowed)
                 .unwrap_or_else(|| Cow::Owned(format!("{}", record.args()))),
         })
     }
@@ -582,7 +582,7 @@ pub struct Logger {
     format: Box<dyn FtLogFormat>,
     env_filter: Option<env_filter::Filter>,
     level: LevelFilter,
-    filters: Vec<Box<dyn Fn(&Record) -> bool + Send + Sync>>,
+    filters: Vec<DropFilterFn>,
     queue: Sender<LoggerInput>,
     notification: Receiver<LoggerOutput>,
     block: bool,
@@ -631,13 +631,12 @@ impl Log for Logger {
             .unwrap_or(0) as u32;
 
         // This will short circuit if any of the filters return false, meaning don't keep this record.
-        if !self.filters.is_empty() {
-            if self.filters.iter().all(|filter| filter(record)) {
-                // Drop this log record
-                println!("Dropping this record {:?}", record);
-                return;
-            }
+        if !self.filters.is_empty() && self.filters.iter().all(|filter| filter(record)) {
+            // Drop this log record
+            println!("Dropping this record {:?}", record);
+            return;
         }
+
         if let Some(filter) = &self.env_filter {
             if !filter.matches(record) {
                 // Drop this log record
@@ -762,7 +761,7 @@ pub struct Builder {
     root: Box<dyn Write + Send>,
     appenders: HashMap<&'static str, Box<dyn Write + Send + 'static>>,
     filters: Vec<Directive>,
-    drop_filters: Vec<Box<dyn Fn(&Record) -> bool + Send + Sync>>,
+    drop_filters: Vec<DropFilterFn>,
     bounded_channel_option: Option<BoundedChannelOption>,
 }
 
@@ -772,10 +771,17 @@ pub fn builder() -> Builder {
     Builder::new()
 }
 
+/// Type alias for the closure intended to filter drops
+pub type DropFilterFn = Box<dyn Fn(&Record) -> bool + Send + Sync>;
+
+/// Type alias for the closure for filtering/redirecting logs to appenders
+pub type AppenderFilterFn = Box<dyn Fn(&dyn Display, Level, &str) -> bool + Send>;
+
 struct Directive {
-    filter: Box<dyn Fn(&dyn Display, Level, &str) -> bool + Send>,
+    filter: AppenderFilterFn,
     appender: Option<&'static str>,
 }
+
 /// timezone for log
 pub enum LogTimezone {
     /// local timezone
@@ -864,9 +870,9 @@ impl Builder {
     /// thread is bounded, and set to discard excessive log messages
     #[inline]
     pub fn print_omitted_count(mut self, print: bool) -> Builder {
-        self.bounded_channel_option
-            .as_mut()
-            .map(|o| o.print = print);
+        if let Some(o) = self.bounded_channel_option.as_mut() {
+            o.print = print;
+        }
         self
     }
 
@@ -904,21 +910,24 @@ impl Builder {
     /// ftlog will still log up to INFO.
     #[inline]
     pub fn filter<A: Into<Option<&'static str>>, L: Into<Option<LevelFilter>>>(
-        mut self,
+        self,
         module_path: &'static str,
         appender: A,
         level: L,
     ) -> Builder {
         let appender = appender.into();
         let level = level.into();
-        if appender.is_some() || level.is_some() {
-            self.filters.push(Directive {
-                path: module_path,
-                appender: appender,
-                level: level,
-            });
+        match (appender, level) {
+            (Some(appender), Some(lvl)) => self.filter_with(
+                move |_msg, level, target| module_path == target && level == lvl,
+                appender,
+            ),
+            (Some(appender), None) => {
+                self.filter_with(move |_msg, _lvl, target| module_path == target, appender)
+            }
+
+            _ => self,
         }
-        self
     }
 
     /// Add a filter to redirect log to different output
@@ -930,7 +939,11 @@ impl Builder {
     /// If we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
     /// ftlog will still log up to INFO.
     #[inline]
-    pub fn filter_with<A: Into<Option<&'static str>>, F>(mut self, filter: F, appender: A) -> Builder
+    pub fn filter_with<A: Into<Option<&'static str>>, F>(
+        mut self,
+        filter: F,
+        appender: A,
+    ) -> Builder
     where
         F: Fn(&dyn Display, Level, &str) -> bool + Send + Sync + 'static,
     {
