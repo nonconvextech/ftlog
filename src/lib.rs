@@ -897,15 +897,40 @@ impl Builder {
     }
 
     /// Add a filter to redirect log to different output
+    /// target (e.g. stderr, stdout, different files).
+    ///
+    /// **ATTENTION**: Any level more verbose than `Builder::max_log_level` will be ignored.
+    /// If we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
+    /// ftlog will still log up to INFO.
+    #[inline]
+    pub fn filter<A: Into<Option<&'static str>>, L: Into<Option<LevelFilter>>>(
+        mut self,
+        module_path: &'static str,
+        appender: A,
+        level: L,
+    ) -> Builder {
+        let appender = appender.into();
+        let level = level.into();
+        if appender.is_some() || level.is_some() {
+            self.filters.push(Directive {
+                path: module_path,
+                appender: appender,
+                level: level,
+            });
+        }
+        self
+    }
+
+    /// Add a filter to redirect log to different output
     /// target (e.g. stderr, stdout, different files). The filter closure takes in a
     /// message, a level and a target. The filter must return true if the log message
     /// should use this appender. Note that this will use the first match that succeeds.
     ///
-    /// **ATTENTION**: level more verbose than `Builder::max_log_level` will be ignored.
-    /// Say we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
+    /// **ATTENTION**: Any level more verbose than `Builder::max_log_level` will be ignored.
+    /// If we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
     /// ftlog will still log up to INFO.
     #[inline]
-    pub fn filter<A: Into<Option<&'static str>>, F>(mut self, filter: F, appender: A) -> Builder
+    pub fn filter_with<A: Into<Option<&'static str>>, F>(mut self, filter: F, appender: A) -> Builder
     where
         F: Fn(&dyn Display, Level, &str) -> bool + Send + Sync + 'static,
     {
