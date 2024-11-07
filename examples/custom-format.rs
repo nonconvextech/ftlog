@@ -41,7 +41,7 @@ fn init() -> LoggerGuard {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_str(&format!(
                 "{}@{}||{}:{}[{}] {}",
-                self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
+                self.thread.as_deref().unwrap_or(""),
                 self.module_path.unwrap_or(""),
                 self.file.unwrap_or(""),
                 self.line.unwrap_or(0),
@@ -72,17 +72,17 @@ fn init() -> LoggerGuard {
         )
         // ---------- configure additional filter ----------
         // write to "ftlog-appender" appender, with different level filter
-        .filter(
+        .filter_with(
             |_msg, level, target| target == "ftlog::appender" && level == LevelFilter::Error,
             "ftlog-appender",
         )
         // write to root appender, but with different level filter
-        .filter(
+        .filter_with(
             |_msg, level, target| target == "ftlog" && level == LevelFilter::Trace,
             "ftlog",
         )
         // write to "ftlog" appender, with default level filter
-        .filter(
+        .filter_with(
             |_msg, _level, target| target == "ftlog::appender::file",
             "ftlog",
         )
