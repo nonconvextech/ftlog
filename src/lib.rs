@@ -1107,12 +1107,7 @@ impl Builder {
                                 last_flush = Instant::now();
                             };
                         }
-                        Err(e) => {
-                            eprintln!(
-                                "sender closed without sending a Quit first, this is a bug, {}",
-                                e
-                            );
-                        }
+                        Err(_) => break,
                     }
                 }
             })?;
