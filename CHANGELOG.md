@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.15](https://github.com/nonconvextech/ftlog/compare/v0.2.14...v0.2.15) (2025-03-28)
+
+
+### Bug Fixes
+
+* break when ftlog queue sender is dropped, which cuase infinite stderrr output when duplicate initialzation occurs ([398b0f8](https://github.com/nonconvextech/ftlog/commit/398b0f838ac9f049e0655a0027e5c853a1c7a89c))
+
 ### [0.2.14](https://github.com/nonconvextech/ftlog/compare/v0.2.13...v0.2.14) (2024-05-23)
 
 
