@@ -5,14 +5,14 @@ use std::{
 
 use ftlog::appender::{Duration, FileAppender, Period};
 
-pub fn setup() -> () {
+pub fn setup() {
     let logger = ftlog::Builder::new()
         .bounded(10000, true)
         .root(FileAppender::new("./root.log"))
         // .utc()
-        .filter("rotate", "rotate", None)
+        .filter_with(|_msg, _level, target| target == "rotate", "rotate")
         .appender("rotate", FileAppender::rotate("rotate.log", Period::Minute))
-        .filter("expire", "expire", None)
+        .filter_with(|_msg, _level, target| target == "expire", "expire")
         .appender(
             "expire",
             FileAppender::rotate_with_expire("expire.log", Period::Day, Duration::days(7)),
@@ -25,7 +25,6 @@ pub fn setup() -> () {
 fn clean(dir: &str) {
     for file in read_dir(dir)
         .unwrap()
-        .into_iter()
         .filter_map(|x| x.ok())
         .filter(|f| f.file_type().unwrap().is_file())
     {
@@ -41,7 +40,7 @@ fn clean(dir: &str) {
     }
 }
 #[test]
-fn test_speed() {
+fn test_speed_utc() {
     // ~80MB
     setup();
     let elapsed1 = {

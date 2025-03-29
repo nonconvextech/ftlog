@@ -76,15 +76,10 @@
 //!             .expire(Duration::days(7))
 //!             .build(),
 //!     )
-//!     // timezone of log message timestamp, use local by default
-//!     // .local_timezone()
-//!     // or use fiexed timezone for better throughput, since retrieving timezone is a time consuming operation
-//!     // this does not affect worker threads (that call log), but can boost log thread performance (higher throughput).
-//!     .fixed_timezone(time::UtcOffset::current_local_offset().unwrap())
 //!     // level filter for root appender
 //!     .root_log_level(LevelFilter::Warn)
 //!     // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
-//!     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+//!     .filter(|msg, level, target| target == "ftlog::appender" && level == LevelFilter::Error, "ftlog-appender")
 //!     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
 //!     .try_init()
 //!     .expect("logger build or set failed");
@@ -312,6 +307,7 @@ use tm::{duration, now, to_utc, Time};
 
 #[cfg(not(feature = "tsc"))]
 mod tm {
+
     use super::*;
 
     pub type Time = std::time::SystemTime;
@@ -365,30 +361,28 @@ fn local_timezone() -> UtcOffset {
 }
 
 struct LogMsg {
-    time: Time,
     msg: Box<dyn Sync + Send + Display>,
     level: Level,
     target: String,
     limit: u32,
     limit_key: u64,
 }
+
 impl LogMsg {
     fn write(
         self,
-        filters: &Vec<Directive>,
+        filters: &[Directive],
         appenders: &mut HashMap<&'static str, Box<dyn Write + Send>>,
         root: &mut Box<dyn Write + Send>,
         root_level: LevelFilter,
         missed_log: &mut HashMap<u64, i64, nohash_hasher::BuildNoHashHasher<u64>>,
         last_log: &mut HashMap<u64, Time, nohash_hasher::BuildNoHashHasher<u64>>,
-        offset: Option<UtcOffset>,
-        time_format: &time::format_description::OwnedFormatItem,
     ) {
-        let writer = if let Some(filter) = filters.iter().find(|x| self.target.starts_with(x.path))
+        // Find an appender filter if one exists
+        let writer = if let Some(filter) = filters
+            .iter()
+            .find(|x| (*x.filter)(&self.msg, self.level, &self.target))
         {
-            if filter.level.map(|l| l < self.level).unwrap_or(false) {
-                return;
-            }
             filter
                 .appender
                 .and_then(|n| appenders.get_mut(n))
@@ -406,8 +400,7 @@ impl LogMsg {
         }
 
         let now = now();
-
-        if self.limit > 0 {
+        let s = if self.limit > 0 {
             let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0);
             if let Some(last) = last_log.get(&self.limit_key) {
                 if duration(*last, now) < Duration::from_millis(self.limit as u64) {
@@ -416,48 +409,15 @@ impl LogMsg {
                 }
             }
             last_log.insert(self.limit_key, now);
-            let delay = duration(self.time, now);
-            let utc_datetime = to_utc(self.time);
 
-            let offset_datetime = offset
-                .map(|o| utc_datetime.to_offset(o))
-                .unwrap_or(utc_datetime);
-
-            let s = format!(
-                "{} {}ms {} {}\n",
-                offset_datetime
-                    .format(&time_format)
-                    .unwrap_or_else(|_| offset_datetime
-                        .format(&time::format_description::well_known::Rfc3339)
-                        .unwrap()),
-                delay.as_millis(),
-                *missed_entry,
-                msg
-            );
-            if let Err(e) = writer.write_all(s.as_bytes()) {
-                eprintln!("logger write message failed: {}", e);
-            };
             *missed_entry = 0;
+            format!("{} {}\n", *missed_entry, msg)
         } else {
-            let delay = duration(self.time, now);
-            let utc_datetime = to_utc(self.time);
-            let offset_datetime = offset
-                .map(|o| utc_datetime.to_offset(o))
-                .unwrap_or(utc_datetime);
-            let s = format!(
-                "{} {}ms {}\n",
-                offset_datetime
-                    .format(&time_format)
-                    .unwrap_or_else(|_| offset_datetime
-                        .format(&time::format_description::well_known::Rfc3339)
-                        .unwrap()),
-                delay.as_millis(),
-                msg
-            );
-            if let Err(e) = writer.write_all(s.as_bytes()) {
-                eprintln!("logger write message failed: {}", e);
-            };
-        }
+            format!("{}\n", msg)
+        };
+        if let Err(e) = writer.write_all(s.as_bytes()) {
+            eprintln!("logger write message failed: {}", e);
+        };
     }
 }
 
@@ -549,24 +509,26 @@ impl FtLogFormat for FtLogFormatter {
     #[inline]
     fn msg(&self, record: &Record) -> Box<dyn Send + Sync + Display> {
         Box::new(Message {
+            time: now(),
             level: record.level(),
             thread: std::thread::current().name().map(|n| n.to_string()),
             file: record
                 .file_static()
-                .map(|s| Cow::Borrowed(s))
+                .map(Cow::Borrowed)
                 .or_else(|| record.file().map(|s| Cow::Owned(s.to_owned())))
                 .unwrap_or(Cow::Borrowed("")),
             line: record.line(),
             args: record
                 .args()
                 .as_str()
-                .map(|s| Cow::Borrowed(s))
+                .map(Cow::Borrowed)
                 .unwrap_or_else(|| Cow::Owned(format!("{}", record.args()))),
         })
     }
 }
 
 struct Message {
+    time: Time,
     level: Level,
     thread: Option<String>,
     file: Cow<'static, str>,
@@ -576,10 +538,15 @@ struct Message {
 
 impl Display for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let utc_datetime = to_utc(self.time);
+
         f.write_str(&format!(
-            "{} {} [{}:{}] {}",
+            "{} {} {} [{}:{}] {}",
+            utc_datetime
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap(),
             self.level,
-            self.thread.as_ref().map(|x| x.as_str()).unwrap_or(""),
+            self.thread.as_deref().unwrap_or(""),
             self.file,
             self.line.unwrap_or(0),
             self.args
@@ -613,7 +580,9 @@ impl Drop for LoggerGuard {
 /// ftlog global logger
 pub struct Logger {
     format: Box<dyn FtLogFormat>,
+    env_filter: Option<env_filter::Filter>,
     level: LevelFilter,
+    filters: Vec<DropFilterFn>,
     queue: Sender<LoggerInput>,
     notification: Receiver<LoggerOutput>,
     block: bool,
@@ -661,7 +630,20 @@ impl Log for Logger {
             .and_then(|x| x.to_u64())
             .unwrap_or(0) as u32;
 
-        let msg = self.format.msg(record);
+        // This will short circuit if any of the filters return false, meaning don't keep this record.
+        if !self.filters.is_empty() && self.filters.iter().all(|filter| filter(record)) {
+            // Drop this log record
+            println!("Dropping this record {:?}", record);
+            return;
+        }
+
+        if let Some(filter) = &self.env_filter {
+            if !filter.matches(record) {
+                // Drop this log record
+                return;
+            }
+        }
+
         let limit_key = if limit == 0 {
             0
         } else {
@@ -674,16 +656,16 @@ impl Log for Logger {
             record.line().unwrap_or(0).hash(&mut b);
             b.finish()
         };
+        let msg = self.format.msg(record);
         let msg = LoggerInput::LogMsg(LogMsg {
-            time: now(),
-            msg: msg,
+            msg,
             target: record.target().to_owned(),
             level: record.level(),
             limit,
             limit_key,
         });
         if self.block {
-            if let Err(_) = self.queue.send(msg) {
+            if self.queue.send(msg).is_err() {
                 let stop = self.stopped.load(Ordering::SeqCst);
                 if !stop {
                     eprintln!("logger queue closed when logging, this is a bug");
@@ -752,11 +734,11 @@ struct BoundedChannelOption {
 ///     ))
 ///     // ---------- configure additional filter ----------
 ///     // write to "ftlog-appender" appender, with different level filter
-///     .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+///     .filter(|msg, level, target| target == "ftlog::appender"&& level == LevelFilter::Error, "ftlog-appender")
 ///     // write to root appender, but with different level filter
-///     .filter("ftlog", None, LevelFilter::Trace)
+///     .filter(|msg, level, target| target == "ftlog" && level == LevelFilter::Trace, None)
 ///     // write to "ftlog" appender, with default level filter
-///     .filter("ftlog::appender::file", "ftlog", None)
+///     .filter(|msg, level, target| target == "ftlog::appender::file", "ftlog")
 ///     // ----------  configure additional appender ----------
 ///     // new appender
 ///     .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
@@ -771,6 +753,7 @@ struct BoundedChannelOption {
 /// local timezone offset forever. Thus timestamp in log does not aware of timezone
 /// change by OS.
 pub struct Builder {
+    env_filter: bool,
     format: Box<dyn FtLogFormat>,
     time_format: Option<OwnedFormatItem>,
     level: Option<LevelFilter>,
@@ -778,8 +761,8 @@ pub struct Builder {
     root: Box<dyn Write + Send>,
     appenders: HashMap<&'static str, Box<dyn Write + Send + 'static>>,
     filters: Vec<Directive>,
+    drop_filters: Vec<DropFilterFn>,
     bounded_channel_option: Option<BoundedChannelOption>,
-    timezone: LogTimezone,
 }
 
 /// Handy function to get ftlog builder
@@ -788,11 +771,17 @@ pub fn builder() -> Builder {
     Builder::new()
 }
 
+/// Type alias for the closure intended to filter drops
+pub type DropFilterFn = Box<dyn Fn(&Record) -> bool + Send + Sync>;
+
+/// Type alias for the closure for filtering/redirecting logs to appenders
+pub type AppenderFilterFn = Box<dyn Fn(&dyn Display, Level, &str) -> bool + Send>;
+
 struct Directive {
-    path: &'static str,
-    level: Option<LevelFilter>,
+    filter: AppenderFilterFn,
     appender: Option<&'static str>,
 }
+
 /// timezone for log
 pub enum LogTimezone {
     /// local timezone
@@ -810,6 +799,7 @@ impl Builder {
     /// Create a ftlog builder with default settings:
     /// - global log level: INFO
     /// - root log level: INFO
+    /// - no drop filters
     /// - default formatter: `FtLogFormatter`
     /// - output to stderr
     /// - bounded channel between worker thread and log thread, with a size limit of 100_000
@@ -817,18 +807,19 @@ impl Builder {
     /// - log with timestamp of local timezone
     pub fn new() -> Builder {
         Builder {
+            env_filter: false,
             format: Box::new(FtLogFormatter),
             level: None,
             root_level: None,
             root: Box::new(stderr()) as Box<dyn Write + Send>,
             appenders: HashMap::new(),
             filters: Vec::new(),
+            drop_filters: Vec::new(),
             bounded_channel_option: Some(BoundedChannelOption {
                 size: 100_000,
                 block: false,
                 print: true,
             }),
-            timezone: LogTimezone::Local,
             time_format: None,
         }
     }
@@ -844,6 +835,16 @@ impl Builder {
     #[inline]
     pub fn time_format(mut self, format: OwnedFormatItem) -> Builder {
         self.time_format = Some(format);
+        self
+    }
+
+    /// This will drop log records before they are sent into the channel.
+    #[inline]
+    pub fn drop_filters<F>(mut self, filter: F) -> Builder
+    where
+        F: Fn(&Record) -> bool + Send + Sync + 'static,
+    {
+        self.drop_filters.push(Box::new(filter));
         self
     }
 
@@ -869,9 +870,9 @@ impl Builder {
     /// thread is bounded, and set to discard excessive log messages
     #[inline]
     pub fn print_omitted_count(mut self, print: bool) -> Builder {
-        self.bounded_channel_option
-            .as_mut()
-            .map(|o| o.print = print);
+        if let Some(o) = self.bounded_channel_option.as_mut() {
+            o.print = print;
+        }
         self
     }
 
@@ -904,25 +905,63 @@ impl Builder {
     /// Add a filter to redirect log to different output
     /// target (e.g. stderr, stdout, different files).
     ///
-    /// **ATTENTION**: level more verbose than `Builder::max_log_level` will be ignored.
-    /// Say we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
+    /// **ATTENTION**: Any level more verbose than `Builder::max_log_level` will be ignored.
+    /// If we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
     /// ftlog will still log up to INFO.
     #[inline]
     pub fn filter<A: Into<Option<&'static str>>, L: Into<Option<LevelFilter>>>(
-        mut self,
+        self,
         module_path: &'static str,
         appender: A,
         level: L,
     ) -> Builder {
         let appender = appender.into();
         let level = level.into();
-        if appender.is_some() || level.is_some() {
+        match (appender, level) {
+            (Some(appender), Some(lvl)) => self.filter_with(
+                move |_msg, level, target| module_path == target && level == lvl,
+                appender,
+            ),
+            (Some(appender), None) => {
+                self.filter_with(move |_msg, _lvl, target| module_path == target, appender)
+            }
+
+            _ => self,
+        }
+    }
+
+    /// Add a filter to redirect log to different output
+    /// target (e.g. stderr, stdout, different files). The filter closure takes in a
+    /// message, a level and a target. The filter must return true if the log message
+    /// should use this appender. Note that this will use the first match that succeeds.
+    ///
+    /// **ATTENTION**: Any level more verbose than `Builder::max_log_level` will be ignored.
+    /// If we configure `max_log_level` to INFO, and even if filter's level is set to DEBUG,
+    /// ftlog will still log up to INFO.
+    #[inline]
+    pub fn filter_with<A: Into<Option<&'static str>>, F>(
+        mut self,
+        filter: F,
+        appender: A,
+    ) -> Builder
+    where
+        F: Fn(&dyn Display, Level, &str) -> bool + Send + Sync + 'static,
+    {
+        let appender = appender.into();
+        if appender.is_some() {
             self.filters.push(Directive {
-                path: module_path,
-                appender: appender,
-                level: level,
+                filter: Box::new(filter),
+                appender,
             });
         }
+        self
+    }
+
+    /// Use the RUST_LOG env variable to filter logs. Uses the same syntax that env_logger
+    /// supports because it uses the same Filter internally.
+    pub fn use_env_filter(mut self) -> Builder {
+        self.env_filter = true;
+
         self
     }
 
@@ -953,60 +992,12 @@ impl Builder {
         self
     }
 
-    #[inline]
-    /// Log with timestamp of local timezone
-    ///
-    /// Timezone is fixed after logger setup for the following reasons:
-    /// 1. `time` v0.3 currently do not allow access to local offset for multithread process
-    /// in unix-like OS.
-    /// 1. timezone retrieval from OS is quite slow (around several microsecond) compare with
-    /// utc timestamp retrieval (around tens of nanoseconds)
-    pub fn local_timezone(mut self) -> Builder {
-        self.timezone = LogTimezone::Local;
-        self
-    }
-
-    #[inline]
-    /// Log with timestamp of UTC timezone
-    pub fn utc(mut self) -> Builder {
-        self.timezone = LogTimezone::Utc;
-        self
-    }
-
-    #[inline]
-    /// Log with timestamp of fixed timezone
-    pub fn fixed_timezone(mut self, timezone: UtcOffset) -> Builder {
-        self.timezone = LogTimezone::Fixed(timezone);
-        self
-    }
-
-    #[inline]
-    /// Specify the timezone of log messages
-    pub fn timezone(mut self, timezone: LogTimezone) -> Builder {
-        self.timezone = timezone;
-        self
-    }
-
     /// Finish building ftlog logger
     ///
     /// The call spawns a log thread to formatting log message into string,
     /// and write to output target.
     pub fn build(self) -> Result<Logger, IoError> {
-        let offset = match self.timezone {
-            LogTimezone::Local => Some(local_timezone()),
-            LogTimezone::Utc => None,
-            LogTimezone::Fixed(offset) => Some(offset),
-        };
-        let time_format = self.time_format.unwrap_or_else(|| {
-            time::format_description::parse_owned::<1>(
-                "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:3]+[offset_hour]",
-            )
-            .unwrap()
-        });
-        let mut filters = self.filters;
-        // sort filters' paths to ensure match for longest path
-        filters.sort_by(|a, b| a.path.len().cmp(&b.path.len()));
-        filters.reverse();
+        let filters = self.filters;
         // check appender name in filters are all valid
         for appender_name in filters.iter().filter_map(|x| x.appender) {
             if !self.appenders.contains_key(appender_name) {
@@ -1014,13 +1005,26 @@ impl Builder {
             }
         }
         let global_level = self.level.unwrap_or(LevelFilter::Info);
-        let root_level = self.root_level.unwrap_or(global_level);
+        let mut root_level = self.root_level.unwrap_or(global_level);
         if global_level < root_level {
             warn!(
                 "Logs with level more verbose than {} will be ignored",
                 global_level,
             );
         }
+        let env_filter = if self.env_filter {
+            let mut builder = env_filter::Builder::new();
+            // Parse a logging filter from an environment variable.
+            if let Ok(rust_log) = std::env::var("RUST_LOG") {
+                builder.parse(&rust_log);
+            }
+            let filter = builder.build();
+            // Set the root level filter to this
+            root_level = filter.filter();
+            Some(filter)
+        } else {
+            None
+        };
 
         let (sync_sender, receiver) = match &self.bounded_channel_option {
             None => unbounded(),
@@ -1032,17 +1036,6 @@ impl Builder {
             .spawn(move || {
                 let mut appenders = self.appenders;
                 let filters = filters;
-
-                for filter in &filters {
-                    if let Some(level) = filter.level {
-                        if global_level < level {
-                            warn!(
-                                "Logs with level more verbose than {} will be ignored in `{}` ",
-                                global_level, filter.path,
-                            );
-                        }
-                    }
-                }
 
                 let mut root = self.root;
                 let mut last_log = HashMap::default();
@@ -1059,8 +1052,6 @@ impl Builder {
                                 root_level,
                                 &mut missed_log,
                                 &mut last_log,
-                                offset,
-                                &time_format,
                             );
                         }
                         Ok(LoggerInput::Flush) => {
@@ -1074,8 +1065,6 @@ impl Builder {
                                         root_level,
                                         &mut missed_log,
                                         &mut last_log,
-                                        offset,
-                                        &time_format,
                                     )
                                 } else {
                                     break 'queue;
@@ -1122,7 +1111,9 @@ impl Builder {
             .map(|x| x.print)
             .unwrap_or(false);
         Ok(Logger {
+            env_filter,
             format: self.format,
+            filters: self.drop_filters,
             level: global_level,
             queue: sync_sender,
             notification: notification_receiver,

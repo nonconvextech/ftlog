@@ -21,7 +21,10 @@ fn init() -> LoggerGuard {
             Box::new(std::io::stdout()),
         ]))
         // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
-        .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+        .filter_with(
+            |_msg, level, target| target == "ftlog::appender" && level == LevelFilter::Error,
+            "ftlog-appender",
+        )
         .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
         .try_init()
         .expect("logger build or set failed")

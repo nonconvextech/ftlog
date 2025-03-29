@@ -2,7 +2,7 @@
 name = "ftlog"
 version = "0.2.15"
 edition = "2021"
-authors = [ "Non-convex Tech" ]
+authors = ["Non-convex Tech"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/nonconvextech/ftlog"
@@ -10,41 +10,42 @@ documentation = "https://docs.rs/ftlog"
 description = """
 An asynchronous logging library for high performance
 """
-categories = [ "development-tools::debugging" ]
-keywords = [ "logging" ]
-exclude = [ ".standard-version", ".versionrc", ".github" ]
+categories = ["development-tools::debugging"]
+keywords = ["logging"]
+exclude = [".standard-version", ".versionrc", ".github"]
 
 [features]
-default = [ "random_drop" ]
-tsc = [ "minstant", "once_cell" ]
-random_drop = [ "fastrand" ]
+default = ["random_drop"]
+tsc = ["minstant", "once_cell"]
+random_drop = ["fastrand"]
 
 [dependencies]
-crossbeam-channel = "0.5.0"
-hashbrown = "0.14"
 arc-swap = "1"
+crossbeam-channel = "0.5.0"
+env_filter = "0.1"
+hashbrown = "0.14"
 nohash-hasher = "0.2"
 typed-builder = "0.16"
 
-  [dependencies.fastrand]
-  version = "2"
-  optional = true
+[dependencies.fastrand]
+version = "2"
+optional = true
 
-  [dependencies.time]
-  version = "0.3"
-  features = [ "local-offset", "formatting" ]
+[dependencies.log]
+version = "0.4"
+features = ["std", "kv_unstable"]
 
-  [dependencies.minstant]
-  version = "0.1"
-  optional = true
+[dependencies.minstant]
+version = "0.1"
+optional = true
 
-  [dependencies.once_cell]
-  version = "1"
-  optional = true
+[dependencies.once_cell]
+version = "1"
+optional = true
 
-  [dependencies.log]
-  version = "0.4"
-  features = [ "std", "kv_unstable" ]
+[dependencies.time]
+version = "0.3"
+features = ["local-offset", "formatting"]
 
 [target."cfg(target_family = \"unix\")".dependencies.tz-rs]
 version = "0.6.14"

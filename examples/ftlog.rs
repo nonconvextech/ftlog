@@ -1,12 +1,12 @@
 use ftlog::{
     appender::{file::Period, FileAppender},
-    info, LoggerGuard,
+    LoggerGuard,
 };
 use log::LevelFilter;
 use time::Duration;
 
 fn init() -> LoggerGuard {
-    // Rotate every day, clean stale logs that were modified 7 days ago on each rotation
+    // Rotate every minute, clean stale logs that were modified 4 minutes ago on each rotation
     let writer = FileAppender::builder()
         .path("./current.log")
         .rotate(Period::Minute)
@@ -18,7 +18,10 @@ fn init() -> LoggerGuard {
         // define root appender, pass None would write to stderr
         .root(writer)
         // write logs in ftlog::appender to "./ftlog-appender.log" instead of "./current.log"
-        .filter("ftlog::appender", "ftlog-appender", LevelFilter::Error)
+        .filter_with(
+            |_msg, level, target| target == "ftlog::appender" && level == LevelFilter::Error,
+            "ftlog-appender",
+        )
         .appender("ftlog-appender", FileAppender::new("ftlog-appender.log"))
         .try_init()
         .expect("logger build or set failed")
