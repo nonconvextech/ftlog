@@ -1,5 +1,6 @@
 //! Useful appenders
 pub mod file;
+pub mod udp;
 
 pub use file::{FileAppender, Period};
 use std::io::Write;

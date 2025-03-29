@@ -254,6 +254,19 @@ let logger = ftlog::builder()
 let _guard = logger.init().unwrap();
 ```
 
+### Sending Logs to a UDP Server
+
+Send logs to a logging server using the UDP protocol
+
+```rust
+//  Address that the target server is listening on
+let target_addr = "127.0.0.1:8080";
+let udp_appender = UdpAppender::builder()
+    .target(target_addr.parse().unwrap())
+    .build();
+ftlog::builder().root(udp_appender).try_init().unwrap();
+```
+
 ## Features
 - **tsc**
   Use [TSC](https://en.wikipedia.org/wiki/Time_Stamp_Counter) for clock source for higher performance without
