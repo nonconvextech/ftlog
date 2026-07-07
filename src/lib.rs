@@ -373,6 +373,7 @@ struct LogMsg {
     limit: u32,
     limit_key: u64,
 }
+const FLUSH_TIMEOUT: Duration = Duration::from_millis(1000);
 impl LogMsg {
     fn write(
         self,
@@ -384,11 +385,14 @@ impl LogMsg {
         last_log: &mut HashMap<u64, Time>,
         offset: Option<UtcOffset>,
         time_format: &time::format_description::OwnedFormatItem,
-    ) {
+        last_write: &mut Time,
+    ) -> bool {
+        let now = now();
+        let needs_flush = || duration(*last_write, now) > FLUSH_TIMEOUT;
         let writer = if let Some(filter) = filters.iter().find(|x| self.target.starts_with(x.path))
         {
             if filter.level.map(|l| l < self.level).unwrap_or(false) {
-                return;
+                return needs_flush();
             }
             filter
                 .appender
@@ -396,24 +400,23 @@ impl LogMsg {
                 .unwrap_or(root)
         } else {
             if root_level < self.level {
-                return;
+                return needs_flush();
             }
             root
         };
 
         let msg = self.msg.to_string();
         if msg.is_empty() {
-            return;
+            return needs_flush();
         }
-
-        let now = now();
 
         if self.limit > 0 {
             let missed_entry = missed_log.entry(self.limit_key).or_insert_with(|| 0);
             if let Some(last) = last_log.get(&self.limit_key) {
                 if duration(*last, now) < Duration::from_millis(self.limit as u64) {
                     *missed_entry += 1;
-                    return;
+
+                    return needs_flush();
                 }
             }
             last_log.insert(self.limit_key, now);
@@ -459,7 +462,29 @@ impl LogMsg {
                 eprintln!("logger write message failed: {}", e);
             };
         }
+        *last_write = now;
+        false
     }
+}
+
+/// Flush every appender and the root writer, throttled to at most once per
+/// `FLUSH_TIMEOUT`. Logs a warning for each writer that fails to flush.
+fn flush_if_due(
+    appenders: &mut HashMap<&'static str, Box<dyn Write + Send>>,
+    root: &mut Box<dyn Write + Send>,
+    last_flush: &mut Instant,
+) {
+    if last_flush.elapsed() <= FLUSH_TIMEOUT {
+        return;
+    }
+    for err in appenders
+        .values_mut()
+        .chain([root])
+        .filter_map(|w| w.flush().err())
+    {
+        log::warn!("Ftlog flush error: {}", err);
+    }
+    *last_flush = Instant::now();
 }
 
 enum LoggerInput {
@@ -1069,11 +1094,14 @@ impl Builder {
                 let mut last_log = HashMap::default();
                 let mut missed_log = HashMap::default();
                 let mut last_flush = Instant::now();
+                let mut last_write = now();
+
                 let timeout = Duration::from_millis(200);
+
                 loop {
                     match receiver.recv_timeout(timeout) {
                         Ok(LoggerInput::LogMsg(log_msg)) => {
-                            log_msg.write(
+                            let needs_flush = log_msg.write(
                                 &filters,
                                 &mut appenders,
                                 &mut root,
@@ -1082,7 +1110,11 @@ impl Builder {
                                 &mut last_log,
                                 offset,
                                 &time_format,
+                                &mut last_write,
                             );
+                            if needs_flush {
+                                flush_if_due(&mut appenders, &mut root, &mut last_flush);
+                            }
                         }
                         Ok(LoggerInput::Flush) => {
                             let max = receiver.len();
@@ -1097,7 +1129,8 @@ impl Builder {
                                         &mut last_log,
                                         offset,
                                         &time_format,
-                                    )
+                                        &mut last_write,
+                                    );
                                 } else {
                                     break 'queue;
                                 }
@@ -1117,16 +1150,7 @@ impl Builder {
                             }
                         }
                         Err(RecvTimeoutError::Timeout) => {
-                            if last_flush.elapsed() > Duration::from_millis(1000) {
-                                let flush_errors = appenders
-                                    .values_mut()
-                                    .chain([&mut root])
-                                    .filter_map(|w| w.flush().err());
-                                for err in flush_errors {
-                                    log::warn!("Ftlog flush error: {}", err);
-                                }
-                                last_flush = Instant::now();
-                            };
+                            flush_if_due(&mut appenders, &mut root, &mut last_flush);
                         }
                         Err(_) => break,
                     }

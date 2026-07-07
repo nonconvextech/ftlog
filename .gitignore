@@ -1,3 +1,4 @@
 /target
+semver-checks/
 /.idea
 Cargo.lock

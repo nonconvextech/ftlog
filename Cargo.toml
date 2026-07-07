@@ -12,7 +12,7 @@ An asynchronous logging library for high performance
 """
 categories = [ "development-tools::debugging" ]
 keywords = [ "logging" ]
-exclude = [ ".standard-version", ".versionrc", ".github" ]
+exclude = [ ".standard-version", ".versionrc", ".github", "semver-checks" ]
 
 [features]
 default = [ "random_drop" ]
