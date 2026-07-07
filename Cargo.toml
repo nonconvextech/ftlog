@@ -1,6 +1,6 @@
 [package]
 name = "ftlog"
-version = "0.2.16"
+version = "0.2.17"
 edition = "2021"
 authors = [ "Non-convex Tech" ]
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,12 @@ An asynchronous logging library for high performance
 """
 categories = [ "development-tools::debugging" ]
 keywords = [ "logging" ]
-exclude = [ ".standard-version", ".versionrc", ".github", "semver-checks" ]
+exclude = [
+  ".standard-version",
+  ".versionrc",
+  ".github",
+  "semver-checks"
+]
 
 [features]
 default = [ "random_drop" ]
