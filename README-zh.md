@@ -174,6 +174,21 @@ logger.init().unwrap();
   1. CPU不能变频
   1. 必须在 **x86架构** 的CPU上，目前只支持 **Linux** 系统。否则会启用备用方案，牺牲时间精度换取速度
 
+- **gzip**
+  在后台线程将分割完成的日志文件压缩为 gzip（`.gz`），不阻塞日志写入。
+
+  ```rust
+  use ftlog::appender::{Compression, FileAppender, Period};
+  let appender = FileAppender::builder()
+      .path("./mylog.log")
+      .rotate(Period::Day)
+      .compress(Compression::Gzip)
+      .build();
+  ```
+
+  仅压缩已完成分割的日志文件，当前正在写入的日志文件保持未压缩，方便 `tail -f` 查看。
+  压缩后的日志同样会按 `expire` 设置自动清理。
+
 ## 性能评测
 
 > Rust：1.67.0-nightly

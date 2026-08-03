@@ -267,6 +267,22 @@ let _guard = logger.init().unwrap();
   The current feature further requires that the build target **MUST BE LINUX**. Otherwise it will fall back to
   a fast but much less accurate implementation.
 
+- **gzip**
+  Compress rotated log files into gzip (`.gz`) in a background thread, without blocking logging.
+
+  ```rust
+  use ftlog::appender::{Compression, FileAppender, Period};
+  let appender = FileAppender::builder()
+      .path("./mylog.log")
+      .rotate(Period::Day)
+      .compress(Compression::Gzip)
+      .build();
+  ```
+
+  Only finished log files are compressed; the log file currently being written stays
+  uncompressed so it remains friendly to `tail -f`. Compressed logs are auto-cleaned by
+  `expire` as well.
+
 ## Timezone
 
 For performance, timezone is detected once at logger buildup, and use it later in every

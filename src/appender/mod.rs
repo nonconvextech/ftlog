@@ -1,6 +1,8 @@
 //! Useful appenders
 pub mod file;
 
+#[cfg(feature = "gzip")]
+pub use file::Compression;
 pub use file::{FileAppender, Period};
 use std::io::Write;
 pub use time::Duration;

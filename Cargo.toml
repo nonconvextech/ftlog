@@ -2,6 +2,7 @@
 name = "ftlog"
 version = "0.2.17"
 edition = "2021"
+rust-version = "1.75"
 authors = [ "Non-convex Tech" ]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -23,6 +24,10 @@ exclude = [
 default = [ "random_drop" ]
 tsc = [ "minstant", "once_cell" ]
 random_drop = [ "fastrand" ]
+gzip = [ "dep:flate2" ]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 crossbeam-channel = "0.5.0"
@@ -32,6 +37,10 @@ typed-builder = "0.23"
 
   [dependencies.fastrand]
   version = "2"
+  optional = true
+
+  [dependencies.flate2]
+  version = "1"
   optional = true
 
   [dependencies.time]
