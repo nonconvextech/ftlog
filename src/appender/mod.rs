@@ -1,5 +1,6 @@
 //! Useful appenders
 pub mod file;
+pub mod udp;
 
 #[cfg(feature = "gzip")]
 pub use file::Compression;
