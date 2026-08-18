@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.18](https://github.com/nonconvextech/ftlog/compare/v0.2.17...v0.2.18) (2026-08-18)
+
+
+### Features
+
+* support gzip compression when rotation ([006e71a](https://github.com/nonconvextech/ftlog/commit/006e71a3ea235084cb126a55d7a56edbb9fe4fda))
+
 ### [0.2.17](https://github.com/nonconvextech/ftlog/compare/v0.2.16...v0.2.17) (2026-07-07)
 
 
